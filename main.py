@@ -8,6 +8,7 @@ from src.services.translator import Translator
 from src.services.notification import NotificationService
 from src.widgets.date_picker import DatePicker
 import csv
+import math
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")
@@ -85,8 +86,9 @@ class EngineerTable(ctk.CTkFrame):
         self.session = session
         self.engineers = []
         self.filtered_engineers = []
-        self.current_page = 0
+        self.current_page = 1
         self.rows_per_page = 10
+        self.total_pages = 1
         self.selected_rows = set()
         
         # Create table header
@@ -118,7 +120,7 @@ class EngineerTable(ctk.CTkFrame):
         self.rows_combo = ctk.CTkComboBox(
             pagination_frame,
             values=["10", "25", "50", "100"],
-            command=self.on_rows_per_page_change,
+            command=self.set_rows_per_page,
             width=70
         )
         self.rows_combo.set("10")
@@ -129,7 +131,7 @@ class EngineerTable(ctk.CTkFrame):
             pagination_frame,
             text="<",
             width=30,
-            command=self.previous_page
+            command=self.prev_page
         )
         self.prev_button.pack(side="left", padx=5)
         
@@ -150,97 +152,99 @@ class EngineerTable(ctk.CTkFrame):
     
     def load_data(self):
         try:
-            self.engineers = self.session.query(Engineer).all()
-            self.filtered_engineers = self.engineers.copy()
-            self.update_table()
+            # Clear existing table
+            for widget in self.table_frame.grid_slaves():
+                widget.destroy()
+            
+            # Calculate offset and limit
+            offset = (self.current_page - 1) * self.rows_per_page
+            
+            # Get total count
+            total_count = self.session.query(Engineer).count()
+            self.total_pages = math.ceil(total_count / self.rows_per_page)
+            
+            # Get engineers for current page
+            engineers = self.session.query(Engineer).offset(offset).limit(self.rows_per_page).all()
+            
+            # Insert data
+            for row, engineer in enumerate(engineers):
+                # Create row selection checkbox
+                checkbox = ctk.CTkCheckBox(
+                    self.table_frame,
+                    text="",
+                    command=lambda e=engineer: self.toggle_row_selection(e.id)
+                )
+                checkbox.grid(row=row, column=0, padx=5, pady=2)
+                checkbox.select() if engineer.id in self.selected_rows else checkbox.deselect()
+                
+                # Add engineer data
+                ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(
+                    row=row, column=1, padx=5, pady=2, sticky="w"
+                )
+                ctk.CTkLabel(self.table_frame, text=engineer.person_name or "").grid(
+                    row=row, column=2, padx=5, pady=2, sticky="w"
+                )
+                ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date or "")).grid(
+                    row=row, column=3, padx=5, pady=2, sticky="w"
+                )
+                ctk.CTkLabel(self.table_frame, text=engineer.address or "").grid(
+                    row=row, column=4, padx=5, pady=2, sticky="w"
+                )
+                ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(
+                    row=row, column=5, padx=5, pady=2, sticky="w"
+                )
+                ctk.CTkLabel(self.table_frame, text=engineer.technical_grades or "").grid(
+                    row=row, column=6, padx=5, pady=2, sticky="w"
+                )
+            
+            # Update pagination controls
+            self.prev_button.configure(state="normal" if self.current_page > 1 else "disabled")
+            self.next_button.configure(state="normal" if self.current_page < self.total_pages else "disabled")
+            self.page_info.configure(text=f"Page {self.current_page} of {self.total_pages}")
+        
         except Exception as e:
             notification.show_error(f"Error loading engineers: {str(e)}")
     
     def apply_filter(self, filter_text=""):
         self.filter_text = filter_text.lower()
         if not self.filter_text:
-            self.filtered_engineers = self.engineers.copy()
+            self.filtered_engineers = self.session.query(Engineer).all()
         else:
             self.filtered_engineers = [
-                engineer for engineer in self.engineers
+                engineer for engineer in self.session.query(Engineer).all()
                 if (self.filter_text in str(engineer.id).lower() or
                     self.filter_text in (engineer.person_name or "").lower() or
                     self.filter_text in (engineer.address or "").lower() or
                     self.filter_text in (engineer.associated_company or "").lower() or
                     self.filter_text in (engineer.technical_grades or "").lower())
             ]
-        self.current_page = 0
-        self.update_table()
+        self.current_page = 1
+        self.load_data()
     
-    def update_table(self):
-        # Clear existing table
-        for widget in self.table_frame.grid_slaves():
-            widget.destroy()
-        
-        # Calculate pagination
-        start_idx = self.current_page * self.rows_per_page
-        end_idx = start_idx + self.rows_per_page
-        page_engineers = self.filtered_engineers[start_idx:end_idx]
-        
-        # Update table content
-        for row, engineer in enumerate(page_engineers):
-            # Create row selection checkbox
-            checkbox = ctk.CTkCheckBox(
-                self.table_frame,
-                text="",
-                command=lambda e=engineer: self.toggle_row_selection(e.id)
-            )
-            checkbox.grid(row=row, column=0, padx=5, pady=2)
-            checkbox.select() if engineer.id in self.selected_rows else checkbox.deselect()
-            
-            # Add engineer data
-            ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(
-                row=row, column=1, padx=5, pady=2, sticky="w"
-            )
-            ctk.CTkLabel(self.table_frame, text=engineer.person_name or "").grid(
-                row=row, column=2, padx=5, pady=2, sticky="w"
-            )
-            ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date or "")).grid(
-                row=row, column=3, padx=5, pady=2, sticky="w"
-            )
-            ctk.CTkLabel(self.table_frame, text=engineer.address or "").grid(
-                row=row, column=4, padx=5, pady=2, sticky="w"
-            )
-            ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(
-                row=row, column=5, padx=5, pady=2, sticky="w"
-            )
-            ctk.CTkLabel(self.table_frame, text=engineer.technical_grades or "").grid(
-                row=row, column=6, padx=5, pady=2, sticky="w"
-            )
-        
-        # Update pagination controls
-        total_pages = max(1, (len(self.filtered_engineers) + self.rows_per_page - 1) // self.rows_per_page)
-        self.prev_button.configure(state="normal" if self.current_page > 0 else "disabled")
-        self.next_button.configure(state="normal" if self.current_page < total_pages - 1 else "disabled")
-        self.page_info.configure(text=f"Page {self.current_page + 1} of {total_pages}")
-    
-    def on_rows_per_page_change(self, value):
+    def set_rows_per_page(self, value):
+        """Set number of rows per page"""
         self.rows_per_page = int(value)
-        self.current_page = 0
-        self.update_table()
-    
-    def previous_page(self):
-        if self.current_page > 0:
-            self.current_page -= 1
-            self.update_table()
+        self.current_page = 1  # Reset to first page
+        self.load_data()
     
     def next_page(self):
-        total_pages = (len(self.filtered_engineers) + self.rows_per_page - 1) // self.rows_per_page
-        if self.current_page < total_pages - 1:
+        """Go to next page"""
+        if self.current_page < self.total_pages:
             self.current_page += 1
-            self.update_table()
+            self.load_data()
+    
+    def prev_page(self):
+        """Go to previous page"""
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.load_data()
     
     def toggle_row_selection(self, engineer_id):
         if engineer_id in self.selected_rows:
             self.selected_rows.remove(engineer_id)
         else:
             self.selected_rows.add(engineer_id)
-        self.update_table()
+        self.load_data()
 
 class EngineerDialog(ctk.CTkToplevel):
     def __init__(self, session, engineer=None):
@@ -509,19 +513,6 @@ class App(ctk.CTk):
             
             create_hover_effect(nav_item_frame, text, icon, self.on_nav_button_click)
         
-        # Theme toggle
-        theme_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        theme_frame.grid(row=3, column=0, padx=20, pady=20, sticky="ew")
-        
-        theme_button = ctk.CTkButton(
-            theme_frame,
-            text="Toggle Theme",
-            command=self.toggle_theme,
-            font=("Arial", 13),
-            height=30
-        )
-        theme_button.grid(row=0, column=0, sticky="ew")
-        
         # Bottom buttons frame
         bottom_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         bottom_frame.grid(row=4, column=0, padx=20, pady=20, sticky="sew")
@@ -556,21 +547,36 @@ class App(ctk.CTk):
         self.content.grid_rowconfigure(1, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
         
-        # Toolbar
+        # Top toolbar with theme toggle and search
         toolbar = ctk.CTkFrame(self.content)
         toolbar.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 10))
+        toolbar.grid_columnconfigure(1, weight=1)  # Make search frame expand
+        
+        # Theme toggle button
+        theme_button = ctk.CTkButton(
+            toolbar,
+            text="🌓",  # Moon emoji for theme toggle
+            width=40,
+            height=35,
+            command=self.toggle_theme,
+            font=("Arial", 16),
+            fg_color="transparent",
+            hover_color=("gray70", "gray30"),
+            corner_radius=8
+        )
+        theme_button.grid(row=0, column=0, padx=(5, 10))
         
         # Search frame
         search_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
-        search_frame.pack(side="left", fill="x", expand=True)
+        search_frame.grid(row=0, column=1, sticky="ew")
+        search_frame.grid_columnconfigure(0, weight=1)
         
         self.search_entry = ctk.CTkEntry(
             search_frame,
             placeholder_text="Search engineers...",
-            height=35,
-            width=300
+            height=35
         )
-        self.search_entry.pack(side="left", padx=5)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=5)
         
         search_button = ctk.CTkButton(
             search_frame,
@@ -581,9 +587,59 @@ class App(ctk.CTk):
         )
         search_button.pack(side="left", padx=5)
         
-        # Action buttons
-        actions_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
-        actions_frame.pack(side="right")
+        # Engineer table
+        self.engineer_table = EngineerTable(self.content, self.session)
+        self.engineer_table.grid(row=1, column=0, sticky="nsew")
+        
+        # Bottom frame for pagination and actions
+        bottom_frame = ctk.CTkFrame(self.content, fg_color="transparent")
+        bottom_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=20)
+        bottom_frame.grid_columnconfigure(0, weight=1)  # Make pagination expand
+        
+        # Pagination frame (left side)
+        pagination_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
+        pagination_frame.grid(row=0, column=0, sticky="w")
+        
+        # Add pagination controls
+        rows_per_page = ctk.CTkOptionMenu(
+            pagination_frame,
+            values=["10", "25", "50", "100"],
+            width=70,
+            height=35,
+            command=self.engineer_table.set_rows_per_page
+        )
+        rows_per_page.set("25")
+        rows_per_page.pack(side="left", padx=5)
+        
+        prev_page = ctk.CTkButton(
+            pagination_frame,
+            text="←",
+            width=35,
+            height=35,
+            command=self.engineer_table.prev_page
+        )
+        prev_page.pack(side="left", padx=5)
+        
+        page_label = ctk.CTkLabel(
+            pagination_frame,
+            text="Page 1 of 1",
+            width=100,
+            height=35
+        )
+        page_label.pack(side="left", padx=5)
+        
+        next_page = ctk.CTkButton(
+            pagination_frame,
+            text="→",
+            width=35,
+            height=35,
+            command=self.engineer_table.next_page
+        )
+        next_page.pack(side="left", padx=5)
+        
+        # Action buttons frame (right side)
+        actions_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
+        actions_frame.grid(row=0, column=1, sticky="e")
         
         add_button = ctk.CTkButton(
             actions_frame,
@@ -625,10 +681,6 @@ class App(ctk.CTk):
             font=("Arial Bold", 12)
         )
         export_button.pack(side="left", padx=5)
-        
-        # Engineer table
-        self.engineer_table = EngineerTable(self.content, self.session)
-        self.engineer_table.grid(row=1, column=0, sticky="nsew")
     
     def toggle_theme(self):
         current_mode = ctk.get_appearance_mode()
