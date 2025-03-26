@@ -101,7 +101,7 @@ class EngineerTable(ctk.CTkFrame):
         header_frame = ctk.CTkFrame(self)
         header_frame.pack(fill="x", padx=5, pady=(5,0))
         
-        headers = ["Select", "ID", "Name", "Birth Date", "Company", "Position"]
+        headers = ["Select", "ID", "Name", "Birth Date", "Company", "Position", "Actions"]
         for i, header in enumerate(headers):
             label = ctk.CTkLabel(header_frame, text=header, font=("Arial", 12, "bold"))
             label.grid(row=0, column=i, padx=5, pady=5, sticky="w")
@@ -151,6 +151,34 @@ class EngineerTable(ctk.CTkFrame):
                 ctk.CTkLabel(self.table_frame, text=engineer.birth_date or "").grid(row=row, column=3, padx=5, pady=2)
                 ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(row=row, column=4, padx=5, pady=2)
                 ctk.CTkLabel(self.table_frame, text=engineer.position_title or "").grid(row=row, column=5, padx=5, pady=2)
+                
+                # Actions buttons frame
+                actions_frame = ctk.CTkFrame(self.table_frame)
+                actions_frame.grid(row=row, column=6, padx=5, pady=2)
+                
+                # View Detail button
+                view_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="View",
+                    width=60,
+                    height=25,
+                    command=lambda e=engineer: self.show_engineer_detail(e),
+                    font=("Arial", 11)
+                )
+                view_btn.pack(side="left", padx=2)
+                
+                # Delete button
+                delete_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="Delete",
+                    width=60,
+                    height=25,
+                    command=lambda e=engineer: self.delete_single_engineer(e),
+                    font=("Arial", 11),
+                    fg_color="#E74C3C",
+                    hover_color="#C0392B"
+                )
+                delete_btn.pack(side="left", padx=2)
             
             # Update pagination state
             if hasattr(self, 'on_page_change'):
@@ -212,6 +240,17 @@ class EngineerTable(ctk.CTkFrame):
             return None
         engineer_id = list(self.selected_rows)[0]
         return self.session.query(Engineer).get(engineer_id)
+
+    def delete_single_engineer(self, engineer):
+        if notification.show_confirmation(f"Are you sure you want to delete engineer {engineer.person_name}?"):
+            try:
+                self.session.delete(engineer)
+                self.session.commit()
+                notification.show_success("Engineer deleted successfully")
+                self.load_data()
+            except Exception as e:
+                self.session.rollback()
+                notification.show_error(f"Error deleting engineer: {str(e)}")
 
 class EngineerDetailDialog(ctk.CTkToplevel):
     def __init__(self, parent, engineer):
@@ -1130,16 +1169,6 @@ class App(ctk.CTk):
         actions_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
         actions_frame.grid(row=0, column=1, sticky="e")
         
-        view_button = ctk.CTkButton(
-            actions_frame,
-            text="View Detail",
-            command=lambda: self.engineer_table.show_engineer_detail(self.engineer_table.get_selected_engineer()),
-            height=35,
-            width=100,
-            font=("Arial Bold", 12)
-        )
-        view_button.pack(side="left", padx=5)
-        
         add_button = ctk.CTkButton(
             actions_frame,
             text="Add Engineer",
@@ -1161,10 +1190,10 @@ class App(ctk.CTk):
         
         delete_button = ctk.CTkButton(
             actions_frame,
-            text="Delete",
+            text="Delete Selected",
             command=self.delete_engineer,
             height=35,
-            width=80,
+            width=120,
             fg_color="#E74C3C",
             hover_color="#C0392B",
             font=("Arial Bold", 12)
