@@ -208,10 +208,11 @@ class EngineerTable(ctk.CTkFrame):
         self.load_data()
 
 class EngineerDialog(ctk.CTkToplevel):
-    def __init__(self, session, engineer=None):
+    def __init__(self, session, engineer=None, on_save=None):
         super().__init__()
         self.session = session
         self.engineer = engineer
+        self.on_save = on_save
         self.title(translator.translations['en']['basic_info'])
         self.geometry("600x500")  # Increased height for date picker
         
@@ -332,6 +333,8 @@ class EngineerDialog(ctk.CTkToplevel):
                 self.session.add(self.engineer)
             
             self.session.commit()
+            if self.on_save:
+                self.on_save()
             notification.show_success(f"Engineer {name} {'updated' if self.engineer.id else 'added'} successfully!")
             self.destroy()
             
@@ -653,9 +656,8 @@ class App(ctk.CTk):
         print(f"Navigating to {section}")
 
     def add_engineer(self):
-        dialog = EngineerDialog(self.session)
+        dialog = EngineerDialog(self.session, on_save=self.engineer_table.load_data)
         self.wait_window(dialog)
-        self.engineer_table.load_data()
     
     def edit_engineer(self):
         if len(self.engineer_table.selected_rows) != 1:
@@ -665,9 +667,8 @@ class App(ctk.CTk):
         engineer_id = list(self.engineer_table.selected_rows)[0]
         engineer = self.session.query(Engineer).get(engineer_id)
         if engineer:
-            dialog = EngineerDialog(self.session, engineer)
+            dialog = EngineerDialog(self.session, engineer, on_save=self.engineer_table.load_data)
             self.wait_window(dialog)
-            self.engineer_table.load_data()
     
     def delete_engineer(self):
         if not self.engineer_table.selected_rows:
