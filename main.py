@@ -18,10 +18,24 @@ ctk.set_default_color_theme("blue")
 # Constants
 SIDEBAR_WIDTH = 240
 ICON_SIZE = 20
+DB_FILE = "engineers.db"  # Constant for database file
 
 Base = declarative_base()
 translator = Translator()
 notification = notification
+
+def init_database():
+    # Create database engine
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DB_FILE)
+    engine = create_engine(f'sqlite:///{db_path}')
+    
+    # Create tables only if they don't exist
+    if not os.path.exists(db_path):
+        Base.metadata.create_all(engine)
+    
+    # Create session
+    Session = sessionmaker(bind=engine)
+    return Session()
 
 class Engineer(Base):
     __tablename__ = 'engineers'
@@ -79,12 +93,6 @@ class Training(Base):
     institution = Column(String)
     certificate_number = Column(String)
     engineer = relationship("Engineer", back_populates="training")
-
-# Database initialization
-engine = create_engine('sqlite:///engineers.db')
-Base.metadata.drop_all(engine)  # Drop all tables first
-Base.metadata.create_all(engine)  # Create tables with new schema
-Session = sessionmaker(bind=engine)
 
 class EngineerTable(ctk.CTkFrame):
     def __init__(self, master, session):
@@ -256,94 +264,143 @@ class EngineerDetailDialog(ctk.CTkToplevel):
     def __init__(self, parent, engineer):
         super().__init__(parent)
         
-        self.title(f"Engineer Details - {engineer.person_name}")
+        # Window setup
+        self.title("Engineer Details")
         self.geometry("800x600")
         
-        # Create main container
-        container = ctk.CTkScrollableFrame(self)
-        container.pack(fill="both", expand=True, padx=20, pady=20)
+        # Create main scrollable frame
+        self.main_frame = ctk.CTkScrollableFrame(self)
+        self.main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        # Personal Information Section
-        self.create_section_header(container, "Personal Information", 0)
-        self.create_info_row(container, "Name:", engineer.person_name, 1)
-        self.create_info_row(container, "Birth Date:", engineer.birth_date, 2)
-        self.create_info_row(container, "Address:", engineer.address, 3)
-        self.create_info_row(container, "Company:", engineer.associated_company, 4)
-        self.create_info_row(container, "Position:", engineer.position_title, 5)
+        # Basic Information Section
+        self.create_section("Basic Information", 0)
+        basic_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        basic_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        # Left column
+        left_frame = ctk.CTkFrame(basic_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        self.create_detail_field(left_frame, "Name:", engineer.person_name)
+        self.create_detail_field(left_frame, "Birth Date:", engineer.birth_date)
+        self.create_detail_field(left_frame, "Position:", engineer.position_title)
+        
+        # Right column
+        right_frame = ctk.CTkFrame(basic_frame, fg_color="transparent")
+        right_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        self.create_detail_field(right_frame, "Company:", engineer.associated_company)
+        self.create_detail_field(right_frame, "Address:", engineer.address)
+        self.create_detail_field(right_frame, "Currency:", engineer.currency_unit)
         
         # Technical Grades Section
-        self.create_section_header(container, "Technical Grades", 6)
-        if engineer.technical_grades:
-            grades = json.loads(engineer.technical_grades)
-            row = 7
-            for area in grades.get("technical_area", []):
-                self.create_info_row(container, "Technical Area:", area, row)
-                row += 1
-            for spec in grades.get("specialization", []):
-                self.create_info_row(container, "Specialization:", spec, row)
-                row += 1
-            for grade in grades.get("grade", []):
-                self.create_info_row(container, "Grade:", grade, row)
-                row += 1
+        self.create_section("Technical Grades", 2)
+        grades_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        grades_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        try:
+            grades = json.loads(engineer.technical_grades or '{}')
+            for i, (grade_type, grade) in enumerate(grades.items()):
+                self.create_detail_field(grades_frame, f"{grade_type}:", grade, row=i)
+        except json.JSONDecodeError:
+            self.create_detail_field(grades_frame, "Error:", "Invalid grade data")
         
         # Qualifications Section
-        if engineer.qualifications:
-            self.create_section_header(container, "Qualifications", 8)
-            row = 9
-            for qual in engineer.qualifications:
-                self.create_info_row(container, "Title:", qual.title, row)
-                self.create_info_row(container, "Date:", qual.acquisition_date, row + 1)
-                self.create_info_row(container, "Reg. Number:", qual.registration_number, row + 2)
-                row += 4
+        self.create_section("Qualifications", 4)
+        qual_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        qual_frame.grid(row=5, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        for i, qual in enumerate(engineer.qualifications):
+            qual_item = ctk.CTkFrame(qual_frame, fg_color="#34495E", corner_radius=5)
+            qual_item.pack(fill="x", padx=10, pady=5)
+            self.create_detail_field(qual_item, "Title:", qual.title)
+            self.create_detail_field(qual_item, "Date:", qual.acquisition_date)
+            self.create_detail_field(qual_item, "Reg. Number:", qual.registration_number)
         
         # Education Section
-        if engineer.education:
-            self.create_section_header(container, "Education", row)
-            row += 1
-            for edu in engineer.education:
-                self.create_info_row(container, "Institution:", edu.institution, row)
-                self.create_info_row(container, "Major:", edu.major, row + 1)
-                self.create_info_row(container, "Degree:", edu.degree, row + 2)
-                self.create_info_row(container, "Graduation:", edu.graduation_date, row + 3)
-                row += 5
+        self.create_section("Education", 6)
+        edu_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        edu_frame.grid(row=7, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        for i, edu in enumerate(engineer.education):
+            edu_item = ctk.CTkFrame(edu_frame, fg_color="#34495E", corner_radius=5)
+            edu_item.pack(fill="x", padx=10, pady=5)
+            self.create_detail_field(edu_item, "Graduation:", edu.graduation_date)
+            self.create_detail_field(edu_item, "Institution:", edu.institution)
+            self.create_detail_field(edu_item, "Major:", edu.major)
+            self.create_detail_field(edu_item, "Degree:", edu.degree)
+        
+        # Employment Section
+        self.create_section("Employment History", 8)
+        emp_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        emp_frame.grid(row=9, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        for i, emp in enumerate(engineer.employment):
+            emp_item = ctk.CTkFrame(emp_frame, fg_color="#34495E", corner_radius=5)
+            emp_item.pack(fill="x", padx=10, pady=5)
+            self.create_detail_field(emp_item, "Period:", emp.period)
+            self.create_detail_field(emp_item, "Company:", emp.company)
+        
+        # Training Section
+        self.create_section("Training", 10)
+        train_frame = ctk.CTkFrame(self.main_frame, fg_color="#2C3E50", corner_radius=10)
+        train_frame.grid(row=11, column=0, columnspan=2, sticky="ew", padx=10, pady=5)
+        
+        for i, train in enumerate(engineer.training):
+            train_item = ctk.CTkFrame(train_frame, fg_color="#34495E", corner_radius=5)
+            train_item.pack(fill="x", padx=10, pady=5)
+            self.create_detail_field(train_item, "Period:", train.period)
+            self.create_detail_field(train_item, "Course:", train.course_name)
+            self.create_detail_field(train_item, "Institution:", train.institution)
+            self.create_detail_field(train_item, "Certificate:", train.certificate_number)
         
         # Close button
         close_btn = ctk.CTkButton(
             self,
             text="Close",
             command=self.destroy,
-            width=100
-        )
-        close_btn.pack(pady=10)
-        
-        # Make dialog modal
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_section_header(self, parent, text, row):
-        header = ctk.CTkLabel(
-            parent,
-            text=text,
-            font=("Arial Bold", 14)
-        )
-        header.grid(row=row, column=0, columnspan=2, sticky="w", pady=(15, 5))
-    
-    def create_info_row(self, parent, label, value, row):
-        label_widget = ctk.CTkLabel(
-            parent,
-            text=label,
+            height=35,
+            width=100,
             font=("Arial Bold", 12)
         )
-        label_widget.grid(row=row, column=0, sticky="e", padx=(0, 10), pady=2)
+        close_btn.pack(pady=20)
+        
+        # Make dialog modal
+        self.transient(self.master)
+        self.grab_set()
+    
+    def create_section(self, title, row):
+        label = ctk.CTkLabel(
+            self.main_frame,
+            text=title,
+            font=("Arial Bold", 16),
+            text_color="#3498DB"
+        )
+        label.grid(row=row, column=0, columnspan=2, sticky="w", padx=10, pady=(15, 5))
+    
+    def create_detail_field(self, parent, label, value, row=None):
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        if row is not None:
+            frame.grid(row=row, column=0, sticky="ew", padx=10, pady=2)
+        else:
+            frame.pack(fill="x", padx=5, pady=2)
+        
+        label_widget = ctk.CTkLabel(
+            frame,
+            text=label,
+            font=("Arial Bold", 12),
+            text_color="#BDC3C7",
+            width=100,
+            anchor="e"
+        )
+        label_widget.pack(side="left", padx=(5, 10))
         
         value_widget = ctk.CTkLabel(
-            parent,
-            text=str(value or ""),
+            frame,
+            text=str(value or "N/A"),
             font=("Arial", 12),
-            wraplength=400,
-            justify="left"
+            text_color="#ECF0F1",
+            anchor="w"
         )
-        value_widget.grid(row=row, column=1, sticky="w", pady=2)
+        value_widget.pack(side="left", fill="x", expand=True)
 
 class EngineerDialog(ctk.CTkToplevel):
     def __init__(self, session, engineer=None, on_save=None):
@@ -916,11 +973,7 @@ class App(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         
         # Create SQLite database
-        engine = create_engine('sqlite:///engineers.db')
-        Base.metadata.drop_all(engine)  # Drop all tables first
-        Base.metadata.create_all(engine)  # Create tables with new schema
-        Session = sessionmaker(bind=engine)
-        self.session = Session()
+        self.session = init_database()
         
         # Create sidebar
         self.sidebar = ctk.CTkFrame(self, width=SIDEBAR_WIDTH, corner_radius=0)
