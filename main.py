@@ -109,45 +109,6 @@ class EngineerTable(ctk.CTkFrame):
         for i in range(len(headers)):
             self.table_frame.grid_columnconfigure(i, weight=1)
         
-        # Create pagination controls
-        pagination_frame = ctk.CTkFrame(self)
-        pagination_frame.pack(fill="x", padx=5, pady=5)
-        
-        # Rows per page selector
-        rows_label = ctk.CTkLabel(pagination_frame, text="Rows per page:")
-        rows_label.pack(side="left", padx=(5,0))
-        
-        self.rows_combo = ctk.CTkComboBox(
-            pagination_frame,
-            values=["10", "25", "50", "100"],
-            command=self.set_rows_per_page,
-            width=70
-        )
-        self.rows_combo.set("10")
-        self.rows_combo.pack(side="left", padx=5)
-        
-        # Navigation buttons
-        self.prev_button = ctk.CTkButton(
-            pagination_frame,
-            text="<",
-            width=30,
-            command=self.prev_page
-        )
-        self.prev_button.pack(side="left", padx=5)
-        
-        # Page info label
-        self.page_info = ctk.CTkLabel(pagination_frame, text="")
-        self.page_info.pack(side="left", padx=5)
-        
-        self.next_button = ctk.CTkButton(
-            pagination_frame,
-            text=">",
-            width=30,
-            command=self.next_page
-        )
-        self.next_button.pack(side="left", padx=5)
-        
-        # Load initial data
         self.load_data()
     
     def load_data(self):
