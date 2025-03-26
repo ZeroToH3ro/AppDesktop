@@ -40,7 +40,7 @@ class CustomNotification(ctk.CTkFrame):
             # Close button for error messages
             self.close_button = ctk.CTkButton(
                 self, text="×", width=30, height=30,
-                command=self.destroy,
+                command=self._on_close,
                 fg_color="transparent",
                 text_color="white",
                 hover_color=("#3d425a", "#3d425a")
@@ -48,7 +48,13 @@ class CustomNotification(ctk.CTkFrame):
             self.close_button.grid(row=0, column=2, padx=(5, 10), pady=10)
         
         if auto_close:
-            self.after_id = self.after(duration, self.destroy)
+            self.after_id = self.after(duration, self._on_close)
+    
+    def _on_close(self):
+        if hasattr(self, 'after_id'):
+            self.after_cancel(self.after_id)
+        if self.winfo_exists():
+            self.destroy()
 
 class NotificationService:
     _instance = None
@@ -64,63 +70,39 @@ class NotificationService:
         self.notification_spacing = 10
     
     def close_all_notifications(self):
-        for notification in self.active_notifications:
+        for notification in self.active_notifications[:]:
             if notification.winfo_exists():
                 notification.destroy()
         self.active_notifications.clear()
     
     def _position_notification(self, notification):
+        # Get screen width from the notification's parent
         screen_width = notification.winfo_screenwidth()
         
-        # Create a toplevel window for the notification
-        notification_window = ctk.CTkToplevel()
-        notification_window.overrideredirect(True)  # Remove window decorations
-        notification_window.attributes('-topmost', True)  # Keep on top
-        
-        # Create a frame inside the toplevel window
-        frame = ctk.CTkFrame(notification_window)
-        frame.pack(fill="both", expand=True)
-        
-        # Create a new notification in the frame
-        new_notification = CustomNotification(
-            notification._message,
-            icon_type=notification._icon_type,
-            parent=frame,
-            auto_close=notification._auto_close,
-            duration=notification._duration if hasattr(notification, '_duration') else 2000
-        )
-        new_notification.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
-        
-        # Destroy the original notification
-        notification.destroy()
-        
-        # Position the window
-        notification_window.update_idletasks()
-        width = notification_window.winfo_width()
-        height = notification_window.winfo_height()
-        
-        x = screen_width - width - 20
+        # Position the notification
+        x = screen_width - notification.winfo_reqwidth() - 20
         y = 40
+        
+        # Clean up any closed notifications from the list
+        self.active_notifications = [n for n in self.active_notifications if n.winfo_exists()]
         
         # Adjust position based on existing notifications
         for existing in self.active_notifications:
             if existing.winfo_exists():
                 y += existing.winfo_height() + self.notification_spacing
         
-        notification_window.geometry(f"+{x}+{y}")
-        self.active_notifications.append(notification_window)
-        
-        # Bind close event
-        def on_close():
-            if notification_window in self.active_notifications:
-                self.active_notifications.remove(notification_window)
-            notification_window.destroy()
-        
-        notification_window.protocol("WM_DELETE_WINDOW", on_close)
-        if hasattr(new_notification, 'after_id'):
-            notification_window.after(new_notification.after_id, on_close)
+        # Place the notification
+        notification.place(x=x, y=y)
+        self.active_notifications.append(notification)
     
     def show_success(self, message, parent=None, duration=2000):
+        if not parent:
+            # Find the main window
+            for widget in ctk.CTk.winfo_all():
+                if isinstance(widget, ctk.CTk):
+                    parent = widget
+                    break
+        
         notification = CustomNotification(
             message, icon_type="success",
             parent=parent, auto_close=True,
@@ -129,6 +111,13 @@ class NotificationService:
         self._position_notification(notification)
     
     def show_error(self, message, parent=None):
+        if not parent:
+            # Find the main window
+            for widget in ctk.CTk.winfo_all():
+                if isinstance(widget, ctk.CTk):
+                    parent = widget
+                    break
+        
         notification = CustomNotification(
             message, icon_type="error",
             parent=parent, auto_close=False
