@@ -1,22 +1,21 @@
-import sys
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QTableView, QVBoxLayout, QHBoxLayout, QWidget,
-    QPushButton, QDialog, QFormLayout, QLineEdit, QMessageBox, QLabel,
-    QFrame, QHeaderView, QSizePolicy, QComboBox, QDateEdit, QTextEdit,
-    QToolButton, QFileDialog, QSpinBox, QMenu, QAction, QCheckBox, QInputDialog
-)
-from PyQt5.QtCore import Qt, QAbstractTableModel, QDate, QSize, QPropertyAnimation, QSortFilterProxyModel, QPoint
-from PyQt5.QtGui import QColor, QPalette, QFont, QPixmap, QPainter, QPen, QIcon
+import customtkinter as ctk
+from PIL import Image, ImageDraw
+import os
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Date
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
 from src.services.translator import Translator
 from src.services.notification import NotificationService
+from src.widgets.date_picker import DatePicker
 import csv
-import os
 
-# Ensure Qt uses the right platform plugin
-os.environ['QT_QPA_PLATFORM'] = 'cocoa'
+# Set appearance mode and color theme
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+# Constants
+SIDEBAR_WIDTH = 240
+ICON_SIZE = 20
 
 Base = declarative_base()
 translator = Translator()
@@ -80,23 +79,83 @@ engine = create_engine('sqlite:///engineer_db.db')
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 
-class EngineerModel(QAbstractTableModel):
-    def __init__(self, session):
-        super().__init__()
+class EngineerTable(ctk.CTkFrame):
+    def __init__(self, master, session):
+        super().__init__(master)
         self.session = session
         self.engineers = []
         self.filtered_engineers = []
-        self.filter_text = ""
-        self.page_size = 10
         self.current_page = 0
+        self.rows_per_page = 10
         self.selected_rows = set()
-        self.headers = ["ID", "Name", "Birth Date", "Address", "Company", "Technical Grade"]
-        self.load_data()
-
-    def load_data(self):
-        self.engineers = self.session.query(Engineer).all()
-        self.apply_filter()
         
+        # Create table header
+        header_frame = ctk.CTkFrame(self)
+        header_frame.pack(fill="x", padx=5, pady=(5,0))
+        
+        headers = ["ID", "Name", "Birth Date", "Address", "Company", "Technical Grade"]
+        for i, header in enumerate(headers):
+            label = ctk.CTkLabel(header_frame, text=header, font=("Arial", 12, "bold"))
+            label.grid(row=0, column=i, padx=5, pady=5, sticky="w")
+            header_frame.grid_columnconfigure(i, weight=1)
+        
+        # Create scrollable frame for table content
+        self.table_frame = ctk.CTkScrollableFrame(self)
+        self.table_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Configure grid columns
+        for i in range(len(headers)):
+            self.table_frame.grid_columnconfigure(i, weight=1)
+        
+        # Create pagination controls
+        pagination_frame = ctk.CTkFrame(self)
+        pagination_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Rows per page selector
+        rows_label = ctk.CTkLabel(pagination_frame, text="Rows per page:")
+        rows_label.pack(side="left", padx=(5,0))
+        
+        self.rows_combo = ctk.CTkComboBox(
+            pagination_frame,
+            values=["10", "25", "50", "100"],
+            command=self.on_rows_per_page_change,
+            width=70
+        )
+        self.rows_combo.set("10")
+        self.rows_combo.pack(side="left", padx=5)
+        
+        # Navigation buttons
+        self.prev_button = ctk.CTkButton(
+            pagination_frame,
+            text="<",
+            width=30,
+            command=self.previous_page
+        )
+        self.prev_button.pack(side="left", padx=5)
+        
+        # Page info label
+        self.page_info = ctk.CTkLabel(pagination_frame, text="")
+        self.page_info.pack(side="left", padx=5)
+        
+        self.next_button = ctk.CTkButton(
+            pagination_frame,
+            text=">",
+            width=30,
+            command=self.next_page
+        )
+        self.next_button.pack(side="left", padx=5)
+        
+        # Load initial data
+        self.load_data()
+    
+    def load_data(self):
+        try:
+            self.engineers = self.session.query(Engineer).all()
+            self.filtered_engineers = self.engineers.copy()
+            self.update_table()
+        except Exception as e:
+            notification.show_error(f"Error loading engineers: {str(e)}")
+    
     def apply_filter(self, filter_text=""):
         self.filter_text = filter_text.lower()
         if not self.filter_text:
@@ -108,1111 +167,542 @@ class EngineerModel(QAbstractTableModel):
                     self.filter_text in (engineer.person_name or "").lower() or
                     self.filter_text in (engineer.address or "").lower() or
                     self.filter_text in (engineer.associated_company or "").lower() or
-                    (engineer.technical_grades and 
-                     self.filter_text in str(engineer.technical_grades).lower()))
+                    self.filter_text in (engineer.technical_grades or "").lower())
             ]
         self.current_page = 0
-        self.selected_rows.clear()
-        self.layoutChanged.emit()
-        
-    def set_page(self, page):
-        if page >= 0 and page <= self.page_count() - 1:
-            self.current_page = page
-            self.layoutChanged.emit()
-            
-    def set_page_size(self, size):
-        self.page_size = size
-        self.current_page = 0
-        self.layoutChanged.emit()
-            
-    def page_count(self):
-        if not self.filtered_engineers:
-            return 1
-        return max(1, (len(self.filtered_engineers) + self.page_size - 1) // self.page_size)
+        self.update_table()
     
-    def get_visible_engineers(self):
-        start = self.current_page * self.page_size
-        end = min(start + self.page_size, len(self.filtered_engineers))
-        if start >= len(self.filtered_engineers):
-            return []
-        return self.filtered_engineers[start:end]
-
-    def rowCount(self, parent=None):
-        return min(self.page_size, len(self.get_visible_engineers()))
-
-    def columnCount(self, parent=None):
-        return 6
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-
-        if role == Qt.DisplayRole:
-            engineers = self.get_visible_engineers()
-            if not engineers or index.row() >= len(engineers):
-                return None
-                
-            engineer = engineers[index.row()]
-            if index.column() == 0:
-                return str(engineer.id)
-            elif index.column() == 1:
-                return engineer.person_name
-            elif index.column() == 2:
-                return engineer.birth_date
-            elif index.column() == 3:
-                return engineer.address
-            elif index.column() == 4:
-                return engineer.associated_company
-            elif index.column() == 5:
-                return engineer.technical_grades
+    def update_table(self):
+        # Clear existing table
+        for widget in self.table_frame.grid_slaves():
+            widget.destroy()
         
-        if role == Qt.BackgroundRole:
-            if index.row() % 2 == 0:
-                return QColor("#1e2433")
-            else:
-                return QColor("#262b40")
-                
-        if role == Qt.TextAlignmentRole:
-            if index.column() == 0:  # ID column
-                return Qt.AlignCenter
-            return Qt.AlignLeft | Qt.AlignVCenter
+        # Calculate pagination
+        start_idx = self.current_page * self.rows_per_page
+        end_idx = start_idx + self.rows_per_page
+        page_engineers = self.filtered_engineers[start_idx:end_idx]
+        
+        # Update table content
+        for row, engineer in enumerate(page_engineers):
+            # Create row selection checkbox
+            checkbox = ctk.CTkCheckBox(
+                self.table_frame,
+                text="",
+                command=lambda e=engineer: self.toggle_row_selection(e.id)
+            )
+            checkbox.grid(row=row, column=0, padx=5, pady=2)
+            checkbox.select() if engineer.id in self.selected_rows else checkbox.deselect()
             
-        if role == Qt.CheckStateRole and index.column() == 0:
-            if index.row() in self.selected_rows:
-                return Qt.Checked
-            return Qt.Unchecked
+            # Add engineer data
+            ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(
+                row=row, column=1, padx=5, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(self.table_frame, text=engineer.person_name or "").grid(
+                row=row, column=2, padx=5, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date or "")).grid(
+                row=row, column=3, padx=5, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(self.table_frame, text=engineer.address or "").grid(
+                row=row, column=4, padx=5, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(
+                row=row, column=5, padx=5, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(self.table_frame, text=engineer.technical_grades or "").grid(
+                row=row, column=6, padx=5, pady=2, sticky="w"
+            )
+        
+        # Update pagination controls
+        total_pages = max(1, (len(self.filtered_engineers) + self.rows_per_page - 1) // self.rows_per_page)
+        self.prev_button.configure(state="normal" if self.current_page > 0 else "disabled")
+        self.next_button.configure(state="normal" if self.current_page < total_pages - 1 else "disabled")
+        self.page_info.configure(text=f"Page {self.current_page + 1} of {total_pages}")
+    
+    def on_rows_per_page_change(self, value):
+        self.rows_per_page = int(value)
+        self.current_page = 0
+        self.update_table()
+    
+    def previous_page(self):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_table()
+    
+    def next_page(self):
+        total_pages = (len(self.filtered_engineers) + self.rows_per_page - 1) // self.rows_per_page
+        if self.current_page < total_pages - 1:
+            self.current_page += 1
+            self.update_table()
+    
+    def toggle_row_selection(self, engineer_id):
+        if engineer_id in self.selected_rows:
+            self.selected_rows.remove(engineer_id)
+        else:
+            self.selected_rows.add(engineer_id)
+        self.update_table()
 
-        return None
-        
-    def setData(self, index, value, role):
-        if role == Qt.CheckStateRole and index.column() == 0:
-            if value == Qt.Checked:
-                self.selected_rows.add(index.row())
-            else:
-                self.selected_rows.discard(index.row())
-            self.dataChanged.emit(index, index)
-            return True
-        return False
-        
-    def flags(self, index):
-        if index.column() == 0:
-            return Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable
-        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
-
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.headers[section]
-        return None
-        
-    def get_selected_engineers(self):
-        """Return list of selected engineers"""
-        engineers = self.get_visible_engineers()
-        return [engineers[row] for row in self.selected_rows if row < len(engineers)]
-
-class SidebarButton(QPushButton):
-    def __init__(self, text, icon_path=None, parent=None):
-        super().__init__(text, parent)
-        self.setMinimumHeight(50)
-        self.setIconSize(QSize(22, 22))
-        
-        if icon_path:
-            self.setIcon(QIcon(icon_path))
-        
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #a0a0a0;
-                text-align: left;
-                padding-left: 20px;
-                border: none;
-                font-size: 14px;
-                border-radius: 0;
-            }
-            QPushButton:hover {
-                background-color: #2d325a;
-                color: white;
-            }
-            QPushButton:checked {
-                background-color: #2d325a;
-                color: #4fd1c5;
-                border-left: 3px solid #4fd1c5;
-            }
-        """)
-        self.setCheckable(True)
-
-class SidebarToggleButton(QToolButton):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(32, 32)
-        self.setStyleSheet("""
-            QToolButton {
-                background-color: transparent;
-                color: white;
-                border: none;
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
-                border-radius: 4px;
-            }
-        """)
-        
-        # Create hamburger icon
-        pixmap = QPixmap(32, 32)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QPen(QColor("white"), 2))
-        # Draw three lines
-        painter.drawLine(8, 10, 24, 10)
-        painter.drawLine(8, 16, 24, 16)
-        painter.drawLine(8, 22, 24, 22)
-        painter.end()
-        
-        self.setIcon(QIcon(pixmap))
-        self.setIconSize(QSize(24, 24))
-
-class EngineerDialog(QDialog):
+class EngineerDialog(ctk.CTkToplevel):
     def __init__(self, session, engineer=None):
         super().__init__()
         self.session = session
         self.engineer = engineer
-        self.setWindowTitle(translator.translations['en']['basic_info'])
-        self.setMinimumWidth(600)
-        layout = QFormLayout()
-
+        self.title(translator.translations['en']['basic_info'])
+        self.geometry("600x500")  # Increased height for date picker
+        
+        # Create form
+        form = ctk.CTkFrame(self)
+        form.pack(padx=20, pady=20, fill="both", expand=True)
+        
         # Basic Information
-        self.name_input = QLineEdit()
-        self.birth_date_input = QDateEdit()
-        self.birth_date_input.setDisplayFormat("yyyy-MM-dd")
-        self.birth_date_input.setCalendarPopup(True)  # Enable calendar popup
-        self.birth_date_input.setDate(QDate.currentDate())  # Set default to current date
-        self.address_input = QLineEdit()
-        self.company_input = QLineEdit()
+        self.name_input = ctk.CTkEntry(form)
+        self.address_input = ctk.CTkEntry(form)
+        self.company_input = ctk.CTkEntry(form)
+        
+        # Date picker
+        self.birth_date_frame = ctk.CTkFrame(form)
+        self.birth_date_input = ctk.CTkEntry(self.birth_date_frame)
+        self.birth_date_input.pack(side="left", padx=(0, 5))
+        
+        def show_date_picker():
+            if hasattr(self, 'date_picker_window'):
+                return
+            
+            self.date_picker_window = ctk.CTkToplevel(self)
+            self.date_picker_window.title("Select Date")
+            self.date_picker_window.geometry("300x300")
+            
+            def on_date_selected(date):
+                self.birth_date_input.delete(0, "end")
+                self.birth_date_input.insert(0, date.strftime("%Y-%m-%d"))
+                self.date_picker_window.destroy()
+                delattr(self, 'date_picker_window')
+            
+            date_picker = DatePicker(self.date_picker_window, command=on_date_selected)
+            date_picker.pack(padx=10, pady=10)
+            
+            if self.birth_date_input.get():
+                try:
+                    date_picker.set_date(self.birth_date_input.get())
+                except ValueError:
+                    pass
+        
+        calendar_button = ctk.CTkButton(
+            self.birth_date_frame,
+            text="📅",
+            width=30,
+            command=show_date_picker
+        )
+        calendar_button.pack(side="left")
         
         # Technical Grades
-        self.grade_input = QComboBox()
-        self.grade_input.addItems(['Junior', 'Intermediate', 'Senior', 'Expert'])
+        self.grade_input = ctk.CTkComboBox(form, values=['Junior', 'Intermediate', 'Senior', 'Expert'])
         
+        # Layout
+        row = 0
+        ctk.CTkLabel(form, text=translator.translations['en']['name']).grid(row=row, column=0, padx=5, pady=5)
+        self.name_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        row += 1
+        ctk.CTkLabel(form, text=translator.translations['en']['birth_date']).grid(row=row, column=0, padx=5, pady=5)
+        self.birth_date_frame.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        row += 1
+        ctk.CTkLabel(form, text="Address").grid(row=row, column=0, padx=5, pady=5)
+        self.address_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        row += 1
+        ctk.CTkLabel(form, text="Company").grid(row=row, column=0, padx=5, pady=5)
+        self.company_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        row += 1
+        ctk.CTkLabel(form, text="Technical Grade").grid(row=row, column=0, padx=5, pady=5)
+        self.grade_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Configure grid
+        form.grid_columnconfigure(1, weight=1)
+        
+        # Save button
+        row += 1
+        save_button = ctk.CTkButton(form, text=translator.translations['en']['save'], command=self.save_engineer)
+        save_button.grid(row=row, column=0, columnspan=2, pady=20)
+        
+        # Load data if editing
         if engineer:
-            self.name_input.setText(engineer.person_name)
-            if engineer.birth_date:
-                try:
-                    date = QDate.fromString(engineer.birth_date, "yyyy-MM-dd")
-                    self.birth_date_input.setDate(date)
-                except:
-                    self.birth_date_input.setDate(QDate.currentDate())
-            self.address_input.setText(engineer.address)
-            self.company_input.setText(engineer.associated_company)
-        
-        layout.addRow(translator.translations['en']['name'] + ":", self.name_input)
-        layout.addRow(translator.translations['en']['birth_date'] + ":", self.birth_date_input)
-        layout.addRow("Address:", self.address_input)
-        layout.addRow("Company:", self.company_input)
-        layout.addRow("Technical Grade:", self.grade_input)
-        
-        save_button = QPushButton(translator.translations['en']['save'])
-        save_button.clicked.connect(self.save_engineer)
-        layout.addWidget(save_button)
-        
-        self.setLayout(layout)
-
+            self.name_input.insert(0, engineer.person_name or "")
+            self.birth_date_input.insert(0, str(engineer.birth_date or ""))
+            self.address_input.insert(0, engineer.address or "")
+            self.company_input.insert(0, engineer.associated_company or "")
+            if engineer.technical_grades:
+                self.grade_input.set(engineer.technical_grades)
+        else:
+            # Set default date to current date
+            self.birth_date_input.insert(0, datetime.now().strftime("%Y-%m-%d"))
+    
     def save_engineer(self):
-        name = self.name_input.text()
-        birth_date = self.birth_date_input.date().toString("yyyy-MM-dd")
-        address = self.address_input.text()
-        company = self.company_input.text()
-        grade = self.grade_input.currentText()
-        
-        if not name or not birth_date:
-            notification.show_error("Name and birth date are required!", self)
-            return
-        
         try:
-            if self.engineer:
-                self.engineer.person_name = name
-                self.engineer.birth_date = birth_date
-                self.engineer.address = address
-                self.engineer.associated_company = company
-                self.engineer.technical_grades = grade
-                message = f"Engineer {name} updated successfully"
-            else:
-                new_engineer = Engineer(
-                    person_name=name,
-                    birth_date=birth_date,
-                    address=address,
-                    associated_company=company,
-                    technical_grades=grade
-                )
-                self.session.add(new_engineer)
-                message = f"Engineer {name} added successfully"
+            if not self.engineer:
+                self.engineer = Engineer()
+            
+            name = self.name_input.get().strip()
+            birth_date = self.birth_date_input.get().strip()
+            
+            if not name or not birth_date:
+                notification.show_error("Name and birth date are required!")
+                return
+            
+            try:
+                parsed_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
+            except ValueError:
+                notification.show_error("Invalid date format. Use YYYY-MM-DD")
+                return
+            
+            self.engineer.person_name = name
+            self.engineer.birth_date = parsed_date
+            self.engineer.address = self.address_input.get()
+            self.engineer.associated_company = self.company_input.get()
+            self.engineer.technical_grades = self.grade_input.get()
+            
+            if not self.engineer.id:
+                self.session.add(self.engineer)
             
             self.session.commit()
-            notification.show_success(message, self)
-            self.accept()
+            notification.show_success(f"Engineer {name} {'updated' if self.engineer.id else 'added'} successfully!")
+            self.destroy()
+            
         except Exception as e:
-            notification.show_error(f"Error saving engineer: {str(e)}", self)
+            notification.show_error(f"Error saving engineer: {str(e)}")
 
-class MainWindow(QMainWindow):
+class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(translator.translations['en']['app_title'])
-        self.resize(1200, 800)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1e2433;
-            }
-            QTableView {
-                background-color: #1e2433;
-                border: none;
-                gridline-color: #373b69;
-            }
-            QTableView::item {
-                padding: 10px;
-            }
-            QHeaderView::section {
-                background-color: #373b69;
-                color: white;
-                padding: 10px;
-                border: 1px solid #4a4d7c;
-                font-weight: bold;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QLabel {
-                color: white;
-            }
-        """)
         
+        # Configure window
+        self.title("Engineer Management System")
+        self.geometry("1200x800")
+        
+        # Configure grid
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
+        
+        # Create SQLite database
+        engine = create_engine('sqlite:///engineers.db')
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
         self.session = Session()
-        self.sidebar_expanded = True
-        self.sidebar_width = 250
-        self.sidebar_collapsed_width = 70
         
-        # Main layout
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        main_layout = QHBoxLayout()
-        main_layout.setSpacing(0)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        # Create sidebar
+        self.sidebar = ctk.CTkFrame(self, width=SIDEBAR_WIDTH, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_rowconfigure(4, weight=1)
         
-        # Sidebar
-        self.sidebar = QFrame()
-        self.sidebar.setStyleSheet("""
-            QFrame {
-                background-color: #171c2c;
-            }
-        """)
-        self.sidebar.setFixedWidth(self.sidebar_width)
-        self.sidebar.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(0)
+        # Profile section
+        profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        profile_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
         
-        # Header with toggle button and title
-        sidebar_header = QWidget()
-        sidebar_header.setFixedHeight(60)
-        sidebar_header.setStyleSheet("background-color: #1a203a;")
-        header_layout = QHBoxLayout(sidebar_header)
-        header_layout.setContentsMargins(10, 0, 10, 0)
+        # Create circular profile image
+        profile_size = 80
+        profile_image = Image.new('RGB', (profile_size, profile_size), color='#2B2B2B')
+        draw = ImageDraw.Draw(profile_image)
+        draw.ellipse([0, 0, profile_size, profile_size], fill='#1F538D')
+        draw.text((profile_size//2, profile_size//2), "A", fill='white', anchor='mm', font=None)
         
-        # Toggle button
-        self.toggle_button = SidebarToggleButton()
-        self.toggle_button.clicked.connect(self.toggle_sidebar)
+        self.profile_photo = ctk.CTkImage(
+            light_image=profile_image,
+            dark_image=profile_image,
+            size=(profile_size, profile_size)
+        )
         
-        # App title
-        title_label = QLabel(translator.translations['en']['app_title'])
-        title_label.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")
+        profile_label = ctk.CTkLabel(
+            profile_frame,
+            image=self.profile_photo,
+            text=""
+        )
+        profile_label.grid(row=0, column=0, pady=(0, 10))
         
-        header_layout.addWidget(self.toggle_button)
-        header_layout.addWidget(title_label)
-        header_layout.addStretch()
+        name_label = ctk.CTkLabel(
+            profile_frame,
+            text="Admin User",
+            font=("Arial Bold", 16)
+        )
+        name_label.grid(row=1, column=0)
         
-        sidebar_layout.addWidget(sidebar_header)
-        
-        # User profile section
-        profile_widget = QWidget()
-        profile_widget.setFixedHeight(150)
-        profile_widget.setStyleSheet("background-color: #171c2c;")
-        profile_layout = QVBoxLayout(profile_widget)
-        profile_layout.setAlignment(Qt.AlignCenter)
-        
-        # Profile picture (circle)
-        profile_pic = QLabel()
-        profile_pic.setFixedSize(80, 80)
-        profile_pic.setStyleSheet("""
-            background-color: #2d325a;
-            border-radius: 40px;
-        """)
-        profile_pic.setAlignment(Qt.AlignCenter)
-        
-        # Create a user icon
-        user_pixmap = QPixmap(60, 60)
-        user_pixmap.fill(Qt.transparent)
-        painter = QPainter(user_pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-        # Draw head
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#4fd1c5"))
-        painter.drawEllipse(20, 5, 20, 20)
-        # Draw body
-        painter.drawEllipse(10, 30, 40, 30)
-        painter.end()
-        
-        profile_pic.setPixmap(user_pixmap)
-        
-        # User name
-        user_name = QLabel("Engineer Admin")
-        user_name.setStyleSheet("color: white; font-size: 16px; font-weight: bold;")
-        
-        # User role
-        user_role = QLabel("Administrator")
-        user_role.setStyleSheet("color: #4fd1c5; font-size: 14px;")
-        
-        profile_layout.addWidget(profile_pic, 0, Qt.AlignCenter)
-        profile_layout.addWidget(user_name, 0, Qt.AlignCenter)
-        profile_layout.addWidget(user_role, 0, Qt.AlignCenter)
-        
-        sidebar_layout.addWidget(profile_widget)
-        
-        # Add a separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFixedHeight(1)
-        separator.setStyleSheet("background-color: #2d325a;")
-        sidebar_layout.addWidget(separator)
+        role_label = ctk.CTkLabel(
+            profile_frame,
+            text="System Administrator",
+            font=("Arial", 12),
+            text_color="gray"
+        )
+        role_label.grid(row=2, column=0)
         
         # Navigation section
-        nav_widget = QWidget()
-        nav_layout = QVBoxLayout(nav_widget)
-        nav_layout.setContentsMargins(0, 10, 0, 10)
-        nav_layout.setSpacing(5)
+        nav_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        nav_frame.grid(row=1, column=0, padx=10, sticky="ew")
         
-        # Create navigation buttons with icons
-        self.nav_buttons = []
+        # Navigation items
+        nav_items = [
+            ("Dashboard", "🏠"),
+            ("Engineers", "👥"),
+            ("Reports", "📊"),
+            ("Settings", "⚙️")
+        ]
         
-        # Dashboard button
-        dashboard_btn = SidebarButton(translator.translations['en']['engineer_list'])
-        dashboard_icon = QPixmap(22, 22)
-        dashboard_icon.fill(Qt.transparent)
-        painter = QPainter(dashboard_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawRect(4, 4, 14, 8)
-        painter.drawRect(4, 14, 14, 4)
-        painter.end()
-        dashboard_btn.setIcon(QIcon(dashboard_icon))
-        dashboard_btn.setChecked(True)
-        self.nav_buttons.append(dashboard_btn)
+        for i, (text, icon) in enumerate(nav_items):
+            # Create a frame for each nav item
+            nav_item_frame = ctk.CTkFrame(nav_frame, fg_color="transparent")
+            nav_item_frame.grid(row=i, column=0, sticky="ew", padx=10, pady=5)
+            nav_item_frame.grid_columnconfigure(1, weight=1)
+            
+            def create_hover_effect(frame, text, icon, command):
+                def on_enter(e):
+                    frame.configure(fg_color=("gray70", "gray30"))
+                    icon_label.configure(fg_color=("gray70", "gray30"))
+                    text_label.configure(fg_color=("gray70", "gray30"))
+                
+                def on_leave(e):
+                    frame.configure(fg_color="transparent")
+                    icon_label.configure(fg_color="transparent")
+                    text_label.configure(fg_color="transparent")
+                
+                def on_click(e):
+                    command(text)
+                
+                # Icon label
+                icon_label = ctk.CTkLabel(
+                    frame,
+                    text=icon,
+                    font=("Arial", 16),
+                    width=30,
+                    fg_color="transparent",
+                    text_color=("gray10", "gray90")
+                )
+                icon_label.grid(row=0, column=0, padx=(5, 5))
+                
+                # Text label
+                text_label = ctk.CTkLabel(
+                    frame,
+                    text=text,
+                    font=("Arial Bold", 13),
+                    fg_color="transparent",
+                    text_color=("gray10", "gray90"),
+                    anchor="w"
+                )
+                text_label.grid(row=0, column=1, sticky="w")
+                
+                # Bind events
+                frame.bind("<Enter>", on_enter)
+                icon_label.bind("<Enter>", on_enter)
+                text_label.bind("<Enter>", on_enter)
+                
+                frame.bind("<Leave>", on_leave)
+                icon_label.bind("<Leave>", on_leave)
+                text_label.bind("<Leave>", on_leave)
+                
+                frame.bind("<Button-1>", on_click)
+                icon_label.bind("<Button-1>", on_click)
+                text_label.bind("<Button-1>", on_click)
+                
+                # Make it look clickable
+                frame.configure(cursor="hand2")
+                icon_label.configure(cursor="hand2")
+                text_label.configure(cursor="hand2")
+            
+            create_hover_effect(nav_item_frame, text, icon, self.on_nav_button_click)
         
-        # Basic info button
-        basic_info_btn = SidebarButton(translator.translations['en']['basic_info'])
-        info_icon = QPixmap(22, 22)
-        info_icon.fill(Qt.transparent)
-        painter = QPainter(info_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawEllipse(6, 6, 10, 10)
-        painter.drawLine(11, 18, 11, 20)
-        painter.end()
-        basic_info_btn.setIcon(QIcon(info_icon))
-        self.nav_buttons.append(basic_info_btn)
+        # Theme toggle
+        theme_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        theme_frame.grid(row=3, column=0, padx=20, pady=20, sticky="ew")
         
-        # Qualifications button
-        qualifications_btn = SidebarButton(translator.translations['en']['qualifications'])
-        qual_icon = QPixmap(22, 22)
-        qual_icon.fill(Qt.transparent)
-        painter = QPainter(qual_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawRect(4, 4, 14, 14)
-        painter.drawLine(8, 10, 14, 10)
-        painter.drawLine(8, 14, 14, 14)
-        painter.end()
-        qualifications_btn.setIcon(QIcon(qual_icon))
-        self.nav_buttons.append(qualifications_btn)
+        theme_button = ctk.CTkButton(
+            theme_frame,
+            text="Toggle Theme",
+            command=self.toggle_theme,
+            font=("Arial", 13),
+            height=30
+        )
+        theme_button.grid(row=0, column=0, sticky="ew")
         
-        # Education button
-        education_btn = SidebarButton(translator.translations['en']['education'])
-        edu_icon = QPixmap(22, 22)
-        edu_icon.fill(Qt.transparent)
-        painter = QPainter(edu_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawRect(4, 8, 14, 10)
-        painter.drawLine(4, 8, 11, 3)
-        painter.drawLine(18, 8, 11, 3)
-        painter.end()
-        education_btn.setIcon(QIcon(edu_icon))
-        self.nav_buttons.append(education_btn)
-        
-        # Experience button
-        experience_btn = SidebarButton(translator.translations['en']['experience'])
-        exp_icon = QPixmap(22, 22)
-        exp_icon.fill(Qt.transparent)
-        painter = QPainter(exp_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawRect(4, 6, 14, 12)
-        painter.drawLine(7, 10, 15, 10)
-        painter.drawLine(7, 14, 15, 14)
-        painter.end()
-        experience_btn.setIcon(QIcon(exp_icon))
-        self.nav_buttons.append(experience_btn)
-        
-        # Training button
-        training_btn = SidebarButton(translator.translations['en']['training'])
-        train_icon = QPixmap(22, 22)
-        train_icon.fill(Qt.transparent)
-        painter = QPainter(train_icon)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawEllipse(4, 6, 10, 10)
-        painter.drawLine(14, 11, 18, 11)
-        painter.drawLine(16, 9, 18, 11)
-        painter.drawLine(16, 13, 18, 11)
-        painter.end()
-        training_btn.setIcon(QIcon(train_icon))
-        self.nav_buttons.append(training_btn)
-        
-        # Add buttons to layout
-        for btn in self.nav_buttons:
-            nav_layout.addWidget(btn)
-            btn.clicked.connect(self.on_nav_button_clicked)
-        
-        nav_layout.addStretch()
-        
-        sidebar_layout.addWidget(nav_widget)
-        
-        # Bottom buttons (Logout and Quit)
-        bottom_widget = QWidget()
-        bottom_layout = QVBoxLayout(bottom_widget)
-        bottom_layout.setContentsMargins(10, 10, 10, 20)
-        bottom_layout.setSpacing(15)  # Increased spacing between buttons
-        
-        # Add a separator before bottom buttons
-        bottom_separator = QFrame()
-        bottom_separator.setFrameShape(QFrame.HLine)
-        bottom_separator.setFixedHeight(1)
-        bottom_separator.setStyleSheet("background-color: #2d325a;")
-        bottom_layout.addWidget(bottom_separator)
+        # Bottom buttons frame
+        bottom_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        bottom_frame.grid(row=4, column=0, padx=20, pady=20, sticky="sew")
         
         # Logout button
-        logout_btn = QPushButton("Logout")
-        logout_icon = QPixmap(16, 16)
-        logout_icon.fill(Qt.transparent)
-        painter = QPainter(logout_icon)
-        painter.setPen(QPen(QColor("white"), 1.5))
-        painter.drawLine(4, 8, 12, 8)
-        painter.drawLine(8, 4, 12, 8)
-        painter.drawLine(8, 12, 12, 8)
-        painter.end()
-        logout_btn.setIcon(QIcon(logout_icon))
-        logout_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #a0a0a0;
-                text-align: left;
-                padding: 8px 16px;
-                border: 1px solid #2d325a;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #2d325a;
-                color: white;
-            }
-        """)
-        logout_btn.clicked.connect(self.logout)
+        logout_button = ctk.CTkButton(
+            bottom_frame,
+            text="Logout",
+            command=self.logout,
+            font=("Arial Bold", 13),
+            height=35,
+            fg_color="#2980B9",
+            hover_color="#2471A3"
+        )
+        logout_button.grid(row=0, column=0, pady=(0, 10), sticky="ew")
         
         # Quit button
-        quit_btn = QPushButton("Quit")
-        quit_icon = QPixmap(16, 16)
-        quit_icon.fill(Qt.transparent)
-        painter = QPainter(quit_icon)
-        painter.setPen(QPen(QColor("white"), 1.5))
-        painter.drawLine(4, 4, 12, 12)
-        painter.drawLine(4, 12, 12, 4)
-        painter.end()
-        quit_btn.setIcon(QIcon(quit_icon))
-        quit_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #a0a0a0;
-                text-align: left;
-                padding: 8px 16px;
-                border: 1px solid #2d325a;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #f44336;
-                color: white;
-            }
-        """)
-        quit_btn.clicked.connect(self.quit_app)
+        quit_button = ctk.CTkButton(
+            bottom_frame,
+            text="Quit",
+            command=self.quit,
+            font=("Arial Bold", 13),
+            height=35,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        quit_button.grid(row=1, column=0, sticky="ew")
         
-        bottom_layout.addWidget(logout_btn)
-        bottom_layout.addWidget(quit_btn)
+        # Main content area
+        self.content = ctk.CTkFrame(self)
+        self.content.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        self.content.grid_rowconfigure(1, weight=1)
+        self.content.grid_columnconfigure(0, weight=1)
         
-        sidebar_layout.addWidget(bottom_widget)
+        # Toolbar
+        toolbar = ctk.CTkFrame(self.content)
+        toolbar.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 10))
         
-        # Content area
-        content_layout = QVBoxLayout()
-        content_layout.setContentsMargins(20, 20, 20, 20)  # Added margins
+        # Search frame
+        search_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
+        search_frame.pack(side="left", fill="x", expand=True)
         
-        # Create a container for table and search
-        table_container = QVBoxLayout()
-        table_container.setSpacing(10)
+        self.search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="Search engineers...",
+            height=35,
+            width=300
+        )
+        self.search_entry.pack(side="left", padx=5)
         
-        # Create a header container for search and export button
-        table_header = QHBoxLayout()
+        search_button = ctk.CTkButton(
+            search_frame,
+            text="Search",
+            width=80,
+            height=35,
+            command=lambda: self.engineer_table.apply_filter(self.search_entry.get())
+        )
+        search_button.pack(side="left", padx=5)
         
-        # Search bar container - positioned above the table
-        search_container = QWidget()
-        search_container.setFixedWidth(300)
-        search_container.setFixedHeight(36)
-        search_container.setStyleSheet("""
-            QWidget {
-                background-color: #2d325a;
-                border-radius: 18px;
-                padding: 0 10px;
-            }
-        """)
-        search_layout = QHBoxLayout(search_container)
-        search_layout.setContentsMargins(10, 0, 10, 0)
+        # Action buttons
+        actions_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
+        actions_frame.pack(side="right")
         
-        # Search icon
-        search_icon = QLabel()
-        search_icon.setFixedSize(16, 16)
-        # Create search icon
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QPen(QColor("#a0a0a0"), 1.5))
-        painter.drawEllipse(4, 4, 8, 8)
-        painter.drawLine(11, 11, 15, 15)
-        painter.end()
-        search_icon.setPixmap(pixmap)
+        add_button = ctk.CTkButton(
+            actions_frame,
+            text="Add Engineer",
+            command=self.add_engineer,
+            height=35,
+            font=("Arial Bold", 12)
+        )
+        add_button.pack(side="left", padx=5)
         
-        # Search input
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search...")
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                background-color: transparent;
-                border: none;
-                color: white;
-            }
-        """)
-        self.search_input.textChanged.connect(self.search_engineers)
+        edit_button = ctk.CTkButton(
+            actions_frame,
+            text="Edit",
+            command=self.edit_engineer,
+            height=35,
+            width=80,
+            font=("Arial Bold", 12)
+        )
+        edit_button.pack(side="left", padx=5)
         
-        search_layout.addWidget(search_icon)
-        search_layout.addWidget(self.search_input)
+        delete_button = ctk.CTkButton(
+            actions_frame,
+            text="Delete",
+            command=self.delete_engineer,
+            height=35,
+            width=80,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            font=("Arial Bold", 12)
+        )
+        delete_button.pack(side="left", padx=5)
         
-        # Export to CSV button
-        export_button = QPushButton("Export CSV")
-        export_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4285F4;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #3367D6;
-            }
-        """)
-        export_button.clicked.connect(self.export_to_csv)
+        export_button = ctk.CTkButton(
+            actions_frame,
+            text="Export CSV",
+            command=self.export_to_csv,
+            height=35,
+            width=100,
+            font=("Arial Bold", 12)
+        )
+        export_button.pack(side="left", padx=5)
         
-        # Add search and export button to the table header
-        table_header.addWidget(search_container, 0, Qt.AlignLeft)
-        table_header.addStretch()
-        table_header.addWidget(export_button, 0, Qt.AlignRight)
-        
-        # Add the header and table to the container
-        table_container.addLayout(table_header)
-        
-        # Table view for engineers
-        self.table_view = QTableView()
-        self.table_view.setSelectionBehavior(QTableView.SelectRows)
-        self.table_view.setSelectionMode(QTableView.SingleSelection)
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_view.verticalHeader().setVisible(False)
-        self.table_view.setShowGrid(True)
-        self.table_view.setAlternatingRowColors(True)
-        self.table_view.setSortingEnabled(True)
-        self.table_view.horizontalHeader().setSectionsClickable(True)
-        self.table_view.horizontalHeader().sectionClicked.connect(self.header_clicked)
-        self.table_view.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table_view.customContextMenuRequested.connect(self.show_context_menu)
-        self.table_view.setStyleSheet("""
-            QTableView {
-                alternate-background-color: #262b40;
-                gridline-color: #373b69;
-            }
-            QTableView::item:selected {
-                background-color: #373b69;
-            }
-            QHeaderView::section {
-                background-color: #373b69;
-                color: white;
-                padding: 8px;
-                border: 1px solid #4a4d7c;
-                font-weight: bold;
-            }
-        """)
-        
-        table_container.addWidget(self.table_view)
-        
-        # Set up the model and proxy model for sorting
-        self.model = EngineerModel(self.session)
-        self.proxy_model = QSortFilterProxyModel()
-        self.proxy_model.setSourceModel(self.model)
-        self.table_view.setModel(self.proxy_model)
-        
-        # Action buttons container (moved above pagination)
-        action_container = QWidget()
-        action_layout = QHBoxLayout(action_container)
-        action_layout.setContentsMargins(0, 10, 0, 10)
-        action_layout.setSpacing(15)  # Added spacing between buttons
-        
-        # Add button
-        add_button = QPushButton(translator.translations['en']['add'])
-        add_button.clicked.connect(self.add_engineer)
-        action_layout.addWidget(add_button)
-        
-        # Edit button
-        edit_button = QPushButton(translator.translations['en']['edit'])
-        edit_button.clicked.connect(self.edit_engineer)
-        action_layout.addWidget(edit_button)
-        
-        # Delete button
-        delete_button = QPushButton(translator.translations['en']['delete'])
-        delete_button.clicked.connect(self.delete_engineer)
-        action_layout.addWidget(delete_button)
-        
-        action_layout.addStretch()
-        
-        table_container.addWidget(action_container)
-        
-        # Pagination controls
-        pagination_container = QWidget()
-        pagination_layout = QHBoxLayout(pagination_container)
-        pagination_layout.setContentsMargins(0, 10, 0, 0)
-        
-        # Rows per page selector
-        rows_label = QLabel("Rows per page:")
-        rows_label.setStyleSheet("color: white;")
-        pagination_layout.addWidget(rows_label)
-        
-        self.page_size_selector = QComboBox()
-        self.page_size_selector.addItems(["10", "25", "50", "100"])
-        self.page_size_selector.setStyleSheet("""
-            QComboBox {
-                background-color: #373b69;
-                color: white;
-                border: none;
-                padding: 5px;
-                min-width: 70px;
-                border-radius: 4px;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left-width: 1px;
-                border-left-color: #4a4d7c;
-                border-left-style: solid;
-            }
-        """)
-        self.page_size_selector.currentTextChanged.connect(self.change_page_size)
-        pagination_layout.addWidget(self.page_size_selector)
-        
-        pagination_layout.addStretch()
-        
-        # Page display
-        self.page_display = QLabel("1-10 of 0")
-        self.page_display.setStyleSheet("color: white;")
-        pagination_layout.addWidget(self.page_display)
-        
-        # Navigation buttons
-        self.prev_button = QPushButton()
-        self.prev_button.setIcon(self.create_arrow_icon("left"))
-        self.prev_button.setFixedSize(32, 32)
-        self.prev_button.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
-            }
-            QPushButton:disabled {
-                background-color: transparent;
-                opacity: 0.5;
-            }
-        """)
-        self.prev_button.clicked.connect(self.previous_page)
-        pagination_layout.addWidget(self.prev_button)
-        
-        self.next_button = QPushButton()
-        self.next_button.setIcon(self.create_arrow_icon("right"))
-        self.next_button.setFixedSize(32, 32)
-        self.next_button.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
-            }
-            QPushButton:disabled {
-                background-color: transparent;
-                opacity: 0.5;
-            }
-        """)
-        self.next_button.clicked.connect(self.next_page)
-        pagination_layout.addWidget(self.next_button)
-        
-        table_container.addWidget(pagination_container)
-        
-        # Add layouts to content layout
-        content_layout.addLayout(table_container)
-        
-        # Add layouts to main layout
-        main_layout.addWidget(self.sidebar)
-        main_layout.addLayout(content_layout)
-        
-        self.central_widget.setLayout(main_layout)
-
-    def create_arrow_icon(self, direction):
-        """Create an arrow icon for pagination"""
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(Qt.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QPen(QColor("white"), 2))
-        
-        if direction == "left":
-            # Draw left arrow
-            painter.drawLine(12, 3, 4, 8)
-            painter.drawLine(4, 8, 12, 13)
-        else:
-            # Draw right arrow
-            painter.drawLine(4, 3, 12, 8)
-            painter.drawLine(12, 8, 4, 13)
-            
-        painter.end()
-        return QIcon(pixmap)
-        
-    def update_pagination_display(self):
-        """Update the pagination display text"""
-        total = len(self.model.filtered_engineers)
-        if total == 0:
-            self.page_display.setText("0-0 of 0")
-            self.prev_button.setEnabled(False)
-            self.next_button.setEnabled(False)
-            return
-            
-        page_size = self.model.page_size
-        current_page = self.model.current_page
-        start = current_page * page_size + 1
-        end = min(start + page_size - 1, total)
-        
-        self.page_display.setText(f"{start}-{end} of {total}")
-        
-        # Enable/disable navigation buttons
-        self.prev_button.setEnabled(current_page > 0)
-        self.next_button.setEnabled(current_page < self.model.page_count() - 1)
-        
-    def previous_page(self):
-        """Go to the previous page"""
-        if self.model.current_page > 0:
-            self.model.set_page(self.model.current_page - 1)
-            self.update_pagination_display()
-            
-    def next_page(self):
-        """Go to the next page"""
-        if self.model.current_page < self.model.page_count() - 1:
-            self.model.set_page(self.model.current_page + 1)
-            self.update_pagination_display()
-            
-    def change_page_size(self, size_text):
-        """Change the number of rows per page"""
-        try:
-            size = int(size_text)
-            self.model.set_page_size(size)
-            self.update_pagination_display()
-        except ValueError:
-            pass
-            
-    def search_engineers(self):
-        """Search engineers based on input text"""
-        search_text = self.search_input.text()
-        self.model.apply_filter(search_text)
-        self.update_pagination_display()
-        
-        if search_text and self.model.rowCount(None) == 0:
-            notification.show_error(f"No engineers found matching '{search_text}'", self)
+        # Engineer table
+        self.engineer_table = EngineerTable(self.content, self.session)
+        self.engineer_table.grid(row=1, column=0, sticky="nsew")
+    
+    def toggle_theme(self):
+        current_mode = ctk.get_appearance_mode()
+        new_mode = "Light" if current_mode == "Dark" else "Dark"
+        ctk.set_appearance_mode(new_mode)
+    
+    def on_nav_button_click(self, section):
+        # Handle navigation - for now just print the section
+        print(f"Navigating to {section}")
 
     def add_engineer(self):
         dialog = EngineerDialog(self.session)
-        if dialog.exec_():
-            self.model.load_data()
-            notification.show_success("Engineer added successfully", self)
-
+        self.wait_window(dialog)
+        self.engineer_table.load_data()
+    
     def edit_engineer(self):
-        """Edit selected engineer"""
-        # Check if we have engineers selected by checkboxes
-        selected_engineers = self.model.get_selected_engineers()
-        
-        if selected_engineers:
-            if len(selected_engineers) > 1:
-                notification.show_error("Please select only one engineer to edit", self)
-                return
-            engineer = selected_engineers[0]
-        else:
-            # Fall back to the old selection method
-            index = self.table_view.selectionModel().currentIndex()
-            if not index.isValid():
-                notification.show_error("Please select an engineer to edit!", self)
-                return
-            # Map proxy index to source index
-            source_index = self.proxy_model.mapToSource(index)
-            engineer = self.model.get_visible_engineers()[source_index.row()]
-        
-        dialog = EngineerDialog(self.session, engineer)
-        if dialog.exec_():
-            self.model.load_data()
-            self.update_pagination_display()
-            notification.show_success("Engineer updated successfully", self)
-
-    def delete_engineer(self):
-        """Delete selected engineer(s)"""
-        # Check if we have engineers selected by checkboxes
-        selected_engineers = self.model.get_selected_engineers()
-        
-        if not selected_engineers:
-            # Fall back to the old selection method
-            index = self.table_view.selectionModel().currentIndex()
-            if not index.isValid():
-                notification.show_error("Please select an engineer to delete!", self)
-                return
-            # Map proxy index to source index
-            source_index = self.proxy_model.mapToSource(index)
-            selected_engineers = [self.model.get_visible_engineers()[source_index.row()]]
-            
-        if len(selected_engineers) == 1:
-            message = "Are you sure you want to delete this engineer?"
-        else:
-            message = f"Are you sure you want to delete {len(selected_engineers)} engineers?"
-            
-        if QMessageBox.question(self, "Confirm", message) == QMessageBox.Yes:
-            try:
-                for engineer in selected_engineers:
-                    self.session.delete(engineer)
-                
-                self.session.commit()
-                self.model.load_data()
-                self.update_pagination_display()
-                
-                if len(selected_engineers) == 1:
-                    notification.show_success(f"Engineer {selected_engineers[0].person_name} deleted successfully", self)
-                else:
-                    notification.show_success(f"{len(selected_engineers)} engineers deleted successfully", self)
-            except Exception as e:
-                notification.show_error(f"Error deleting engineer(s): {str(e)}", self)
-    
-    def header_clicked(self, section):
-        """Handle header click to show sorting menu"""
-        menu = QMenu(self)
-        
-        # Unsort action
-        unsort_action = QAction("Unsort", self)
-        unsort_action.triggered.connect(lambda: self.sort_table(-1, None))
-        menu.addAction(unsort_action)
-        
-        # Sort ascending action
-        asc_action = QAction("Sort by ASC", self)
-        asc_action.triggered.connect(lambda: self.sort_table(section, Qt.AscendingOrder))
-        menu.addAction(asc_action)
-        
-        # Sort descending action
-        desc_action = QAction("Sort by DESC", self)
-        desc_action.triggered.connect(lambda: self.sort_table(section, Qt.DescendingOrder))
-        menu.addAction(desc_action)
-        
-        # Add separator
-        menu.addSeparator()
-        
-        # Filter action
-        filter_action = QAction("Filter", self)
-        filter_action.triggered.connect(lambda: self.show_filter_dialog(section))
-        menu.addAction(filter_action)
-        
-        # Show columns action
-        columns_action = QAction("Show columns", self)
-        columns_action.triggered.connect(self.show_columns_dialog)
-        menu.addAction(columns_action)
-        
-        # Hide column action
-        hide_action = QAction("Hide", self)
-        hide_action.triggered.connect(lambda: self.hide_column(section))
-        menu.addAction(hide_action)
-        
-        # Show the menu at cursor position
-        header = self.table_view.horizontalHeader()
-        menu.exec_(self.table_view.mapToGlobal(header.pos() + QPoint(header.sectionPosition(section), header.height())))
-    
-    def show_context_menu(self, pos):
-        """Show context menu for table cells"""
-        index = self.table_view.indexAt(pos)
-        if not index.isValid():
+        if len(self.engineer_table.selected_rows) != 1:
+            notification.show_error("Please select exactly one engineer to edit")
             return
-            
-        menu = QMenu(self)
         
-        # Edit action
-        edit_action = QAction("Edit", self)
-        edit_action.triggered.connect(self.edit_engineer)
-        menu.addAction(edit_action)
-        
-        # Delete action
-        delete_action = QAction("Delete", self)
-        delete_action.triggered.connect(self.delete_engineer)
-        menu.addAction(delete_action)
-        
-        # Show the menu at cursor position
-        menu.exec_(self.table_view.viewport().mapToGlobal(pos))
+        engineer_id = list(self.engineer_table.selected_rows)[0]
+        engineer = self.session.query(Engineer).get(engineer_id)
+        if engineer:
+            dialog = EngineerDialog(self.session, engineer)
+            self.wait_window(dialog)
+            self.engineer_table.load_data()
     
-    def sort_table(self, column, order):
-        """Sort table by column and order"""
-        if column == -1 or order is None:
-            self.proxy_model.sort(-1)  # Unsort
-        else:
-            self.proxy_model.sort(column, order)
-    
-    def hide_column(self, column):
-        """Hide specified column"""
-        self.table_view.setColumnHidden(column, True)
-    
-    def show_columns_dialog(self):
-        """Show dialog to select visible columns"""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Show/Hide Columns")
-        dialog.setFixedWidth(300)
-        layout = QVBoxLayout(dialog)
+    def delete_engineer(self):
+        if not self.engineer_table.selected_rows:
+            notification.show_error("Please select at least one engineer to delete")
+            return
         
-        checkboxes = []
-        for i, header in enumerate(self.model.headers):
-            checkbox = QCheckBox(header)
-            checkbox.setChecked(not self.table_view.isColumnHidden(i))
-            checkboxes.append(checkbox)
-            layout.addWidget(checkbox)
-        
-        buttons = QHBoxLayout()
-        ok_button = QPushButton("OK")
-        ok_button.clicked.connect(dialog.accept)
-        cancel_button = QPushButton("Cancel")
-        cancel_button.clicked.connect(dialog.reject)
-        
-        buttons.addWidget(ok_button)
-        buttons.addWidget(cancel_button)
-        layout.addLayout(buttons)
-        
-        if dialog.exec_():
-            for i, checkbox in enumerate(checkboxes):
-                self.table_view.setColumnHidden(i, not checkbox.isChecked())
-    
-    def show_filter_dialog(self, column):
-        """Show dialog to filter by column value"""
-        header = self.model.headers[column]
-        text, ok = QInputDialog.getText(self, f"Filter by {header}", f"Enter text to filter by {header}:")
-        if ok and text:
-            self.search_input.setText(text)
-            self.search_engineers()
-    
-    def toggle_sidebar(self):
-        """Toggle sidebar between expanded and collapsed states"""
-        self.sidebar_expanded = not self.sidebar_expanded
-        target_width = self.sidebar_width if self.sidebar_expanded else self.sidebar_collapsed_width
-        
-        # Create animation
-        self.animation = QPropertyAnimation(self.sidebar, b"minimumWidth")
-        self.animation.setDuration(250)
-        self.animation.setStartValue(self.sidebar.width())
-        self.animation.setEndValue(target_width)
-        self.animation.start()
-        
-        # Update UI elements based on state
-        for btn in self.nav_buttons:
-            btn.setText(btn.text() if self.sidebar_expanded else "")
-            
-    def on_nav_button_clicked(self):
-        """Handle navigation button clicks"""
-        # Uncheck all buttons
-        for btn in self.nav_buttons:
-            if btn != self.sender():
-                btn.setChecked(False)
-                
-    def logout(self):
-        """Handle logout button click"""
-        reply = QMessageBox.question(self, 'Logout', 'Are you sure you want to logout?',
-                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            notification.show_success("Logged out successfully", self)
-            # Here you would implement actual logout functionality
-            
-    def quit_app(self):
-        """Handle quit button click"""
-        reply = QMessageBox.question(self, 'Quit', 'Are you sure you want to quit?',
-                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            QApplication.quit()
-
-    def export_to_csv(self):
-        """Export engineer data to CSV file"""
         try:
-            # Get file name from save dialog
-            file_name, _ = QFileDialog.getSaveFileName(
-                self, "Export to CSV", "", "CSV Files (*.csv);;All Files (*)"
-            )
+            for engineer_id in self.engineer_table.selected_rows:
+                engineer = self.session.query(Engineer).get(engineer_id)
+                if engineer:
+                    self.session.delete(engineer)
             
-            if file_name:
-                # If no extension is provided, add .csv
-                if not file_name.endswith('.csv'):
-                    file_name += '.csv'
-                
-                # Get all engineers from the model
-                engineers = self.model.engineers
-                
-                # Write to CSV
-                with open(file_name, 'w', newline='') as csvfile:
-                    writer = csv.writer(csvfile)
-                    
-                    # Write header
-                    headers = ["ID", "Name", "Birth Date", "Address", "Company", "Technical Grade"]
-                    writer.writerow(headers)
-                    
-                    # Write data
-                    for engineer in engineers:
-                        row = [
-                            engineer.id,
-                            engineer.person_name,
-                            engineer.birth_date,
-                            engineer.address,
-                            engineer.associated_company,
-                            engineer.technical_grades
-                        ]
-                        writer.writerow(row)
-                
-                notification.show_success(f"Data exported to {file_name}", self)
+            self.session.commit()
+            notification.show_success(f"Successfully deleted {len(self.engineer_table.selected_rows)} engineer(s)")
+            self.engineer_table.selected_rows.clear()
+            self.engineer_table.load_data()
+            
         except Exception as e:
-            notification.show_error(f"Error exporting data: {str(e)}", self)
+            notification.show_error(f"Error deleting engineers: {str(e)}")
+    
+    def export_to_csv(self):
+        try:
+            filename = "engineers.csv"
+            with open(filename, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["ID", "Name", "Birth Date", "Address", "Company", "Technical Grade"])
+                
+                for engineer in self.session.query(Engineer).all():
+                    writer.writerow([
+                        engineer.id,
+                        engineer.person_name,
+                        engineer.birth_date,
+                        engineer.address,
+                        engineer.associated_company,
+                        engineer.technical_grades
+                    ])
+            
+            notification.show_success(f"Successfully exported to {filename}")
+            
+        except Exception as e:
+            notification.show_error(f"Error exporting to CSV: {str(e)}")
+    
+    def logout(self):
+        """Handle logout action"""
+        if notification.show_confirmation("Are you sure you want to logout?"):
+            # Add your logout logic here
+            self.quit()  # For now, just quit the application
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+    app = App()
+    app.mainloop()
