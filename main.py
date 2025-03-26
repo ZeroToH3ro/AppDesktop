@@ -9,6 +9,7 @@ from src.services.notification import notification
 from src.widgets.date_picker import DatePicker
 import csv
 import math
+import json
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")
@@ -26,13 +27,17 @@ class Engineer(Base):
     __tablename__ = 'engineers'
     id = Column(Integer, primary_key=True)
     person_name = Column(String)
-    birth_date = Column(Date)  
+    birth_date = Column(String)  # Changed to String to match the format '86.02.18'
     address = Column(String)
     associated_company = Column(String)
     currency_unit = Column(String, default='백만원')
-    technical_grades = Column(String)  
+    technical_grades = Column(String)  # Store as JSON string
     position_title = Column(String)
     expertise_area = Column(String)
+    project_lead = Column(String)
+    experience_summary = Column(String)
+    participation_days = Column(String)  # Store as JSON string
+    participation_details = Column(String)  # Store as JSON string
     qualifications = relationship("Qualification", back_populates="engineer", cascade="all, delete-orphan")
     education = relationship("Education", back_populates="engineer", cascade="all, delete-orphan")
     employment = relationship("Employment", back_populates="engineer", cascade="all, delete-orphan")
@@ -76,8 +81,9 @@ class Training(Base):
     engineer = relationship("Engineer", back_populates="training")
 
 # Database initialization
-engine = create_engine('sqlite:///engineer_db.db')
-Base.metadata.create_all(engine)
+engine = create_engine('sqlite:///engineers.db')
+Base.metadata.drop_all(engine)  # Drop all tables first
+Base.metadata.create_all(engine)  # Create tables with new schema
 Session = sessionmaker(bind=engine)
 
 class EngineerTable(ctk.CTkFrame):
@@ -95,7 +101,7 @@ class EngineerTable(ctk.CTkFrame):
         header_frame = ctk.CTkFrame(self)
         header_frame.pack(fill="x", padx=5, pady=(5,0))
         
-        headers = ["ID", "Name", "Birth Date", "Address", "Company", "Technical Grade"]
+        headers = ["Select", "ID", "Name", "Birth Date", "Company", "Position"]
         for i, header in enumerate(headers):
             label = ctk.CTkLabel(header_frame, text=header, font=("Arial", 12, "bold"))
             label.grid(row=0, column=i, padx=5, pady=5, sticky="w")
@@ -141,11 +147,10 @@ class EngineerTable(ctk.CTkFrame):
                 
                 # Display engineer data
                 ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(row=row, column=1, padx=5, pady=2)
-                ctk.CTkLabel(self.table_frame, text=engineer.person_name).grid(row=row, column=2, padx=5, pady=2)
-                ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date)).grid(row=row, column=3, padx=5, pady=2)
-                ctk.CTkLabel(self.table_frame, text=engineer.address).grid(row=row, column=4, padx=5, pady=2)
-                ctk.CTkLabel(self.table_frame, text=engineer.associated_company).grid(row=row, column=5, padx=5, pady=2)
-                ctk.CTkLabel(self.table_frame, text=engineer.technical_grades).grid(row=row, column=6, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.person_name or "").grid(row=row, column=2, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.birth_date or "").grid(row=row, column=3, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(row=row, column=4, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.position_title or "").grid(row=row, column=5, padx=5, pady=2)
             
             # Update pagination state
             if hasattr(self, 'on_page_change'):
@@ -198,143 +203,670 @@ class EngineerTable(ctk.CTkFrame):
     def set_page_change_callback(self, callback):
         self.on_page_change = callback
 
+    def show_engineer_detail(self, engineer):
+        detail_dialog = EngineerDetailDialog(self, engineer)
+        detail_dialog.focus()
+
+    def get_selected_engineer(self):
+        if len(self.selected_rows) != 1:
+            return None
+        engineer_id = list(self.selected_rows)[0]
+        return self.session.query(Engineer).get(engineer_id)
+
+class EngineerDetailDialog(ctk.CTkToplevel):
+    def __init__(self, parent, engineer):
+        super().__init__(parent)
+        
+        self.title(f"Engineer Details - {engineer.person_name}")
+        self.geometry("800x600")
+        
+        # Create main container
+        container = ctk.CTkScrollableFrame(self)
+        container.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Personal Information Section
+        self.create_section_header(container, "Personal Information", 0)
+        self.create_info_row(container, "Name:", engineer.person_name, 1)
+        self.create_info_row(container, "Birth Date:", engineer.birth_date, 2)
+        self.create_info_row(container, "Address:", engineer.address, 3)
+        self.create_info_row(container, "Company:", engineer.associated_company, 4)
+        self.create_info_row(container, "Position:", engineer.position_title, 5)
+        
+        # Technical Grades Section
+        self.create_section_header(container, "Technical Grades", 6)
+        if engineer.technical_grades:
+            grades = json.loads(engineer.technical_grades)
+            row = 7
+            for area in grades.get("technical_area", []):
+                self.create_info_row(container, "Technical Area:", area, row)
+                row += 1
+            for spec in grades.get("specialization", []):
+                self.create_info_row(container, "Specialization:", spec, row)
+                row += 1
+            for grade in grades.get("grade", []):
+                self.create_info_row(container, "Grade:", grade, row)
+                row += 1
+        
+        # Qualifications Section
+        if engineer.qualifications:
+            self.create_section_header(container, "Qualifications", 8)
+            row = 9
+            for qual in engineer.qualifications:
+                self.create_info_row(container, "Title:", qual.title, row)
+                self.create_info_row(container, "Date:", qual.acquisition_date, row + 1)
+                self.create_info_row(container, "Reg. Number:", qual.registration_number, row + 2)
+                row += 4
+        
+        # Education Section
+        if engineer.education:
+            self.create_section_header(container, "Education", row)
+            row += 1
+            for edu in engineer.education:
+                self.create_info_row(container, "Institution:", edu.institution, row)
+                self.create_info_row(container, "Major:", edu.major, row + 1)
+                self.create_info_row(container, "Degree:", edu.degree, row + 2)
+                self.create_info_row(container, "Graduation:", edu.graduation_date, row + 3)
+                row += 5
+        
+        # Close button
+        close_btn = ctk.CTkButton(
+            self,
+            text="Close",
+            command=self.destroy,
+            width=100
+        )
+        close_btn.pack(pady=10)
+        
+        # Make dialog modal
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_section_header(self, parent, text, row):
+        header = ctk.CTkLabel(
+            parent,
+            text=text,
+            font=("Arial Bold", 14)
+        )
+        header.grid(row=row, column=0, columnspan=2, sticky="w", pady=(15, 5))
+    
+    def create_info_row(self, parent, label, value, row):
+        label_widget = ctk.CTkLabel(
+            parent,
+            text=label,
+            font=("Arial Bold", 12)
+        )
+        label_widget.grid(row=row, column=0, sticky="e", padx=(0, 10), pady=2)
+        
+        value_widget = ctk.CTkLabel(
+            parent,
+            text=str(value or ""),
+            font=("Arial", 12),
+            wraplength=400,
+            justify="left"
+        )
+        value_widget.grid(row=row, column=1, sticky="w", pady=2)
+
 class EngineerDialog(ctk.CTkToplevel):
     def __init__(self, session, engineer=None, on_save=None):
         super().__init__()
         self.session = session
         self.engineer = engineer
         self.on_save = on_save
-        self.title(translator.translations['en']['basic_info'])
-        self.geometry("600x500")  # Increased height for date picker
+        self.title("Add/Edit Engineer")
+        self.geometry("800x800")
         
-        # Create form
-        form = ctk.CTkFrame(self)
-        form.pack(padx=20, pady=20, fill="both", expand=True)
+        # Create main container with scrollbar
+        container = ctk.CTkScrollableFrame(self)
+        container.pack(padx=20, pady=20, fill="both", expand=True)
         
-        # Basic Information
-        self.name_input = ctk.CTkEntry(form)
-        self.address_input = ctk.CTkEntry(form)
-        self.company_input = ctk.CTkEntry(form)
+        # Personal Information Section
+        self.create_section_header(container, "Personal Information", 0)
+        row = 1
         
-        # Date picker
-        self.birth_date_frame = ctk.CTkFrame(form)
-        self.birth_date_input = ctk.CTkEntry(self.birth_date_frame)
-        self.birth_date_input.pack(side="left", padx=(0, 5))
+        # Basic fields
+        self.name_input = self.create_entry_row(container, "Name:", row)
+        row += 1
+        self.birth_date_input = self.create_entry_row(container, "Birth Date (YY.MM.DD):", row)
+        row += 1
+        self.address_input = self.create_entry_row(container, "Address:", row)
+        row += 1
+        self.company_input = self.create_entry_row(container, "Company:", row)
+        row += 1
+        self.currency_input = self.create_entry_row(container, "Currency Unit:", row, default="백만원")
+        row += 1
         
-        def show_date_picker():
-            if hasattr(self, 'date_picker_window'):
-                return
-            
-            self.date_picker_window = ctk.CTkToplevel(self)
-            self.date_picker_window.title("Select Date")
-            self.date_picker_window.geometry("300x300")
-            
-            def on_date_selected(date):
-                self.birth_date_input.delete(0, "end")
-                self.birth_date_input.insert(0, date.strftime("%Y-%m-%d"))
-                self.date_picker_window.destroy()
-                delattr(self, 'date_picker_window')
-            
-            date_picker = DatePicker(self.date_picker_window, command=on_date_selected)
-            date_picker.pack(padx=10, pady=10)
-            
-            if self.birth_date_input.get():
-                try:
-                    date_picker.set_date(self.birth_date_input.get())
-                except ValueError:
-                    pass
+        # Technical Grades Section
+        self.create_section_header(container, "Technical Grades", row)
+        row += 1
         
-        calendar_button = ctk.CTkButton(
-            self.birth_date_frame,
-            text="📅",
-            width=30,
-            command=show_date_picker
+        # Technical Areas Frame
+        tech_areas_frame = ctk.CTkFrame(container)
+        tech_areas_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.tech_areas = []  # List to store technical area entries
+        add_tech_area_btn = ctk.CTkButton(
+            tech_areas_frame,
+            text="Add Technical Area",
+            command=lambda: self.add_tech_area(tech_areas_frame)
         )
-        calendar_button.pack(side="left")
-        
-        # Technical Grades
-        self.grade_input = ctk.CTkComboBox(form, values=['Junior', 'Intermediate', 'Senior', 'Expert'])
-        
-        # Layout
-        row = 0
-        ctk.CTkLabel(form, text=translator.translations['en']['name']).grid(row=row, column=0, padx=5, pady=5)
-        self.name_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
-        
+        add_tech_area_btn.pack(pady=5)
         row += 1
-        ctk.CTkLabel(form, text=translator.translations['en']['birth_date']).grid(row=row, column=0, padx=5, pady=5)
-        self.birth_date_frame.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
         
-        row += 1
-        ctk.CTkLabel(form, text="Address").grid(row=row, column=0, padx=5, pady=5)
-        self.address_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        # Specializations Frame
+        spec_frame = ctk.CTkFrame(container)
+        spec_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         
+        self.specializations = []  # List to store specialization entries
+        add_spec_btn = ctk.CTkButton(
+            spec_frame,
+            text="Add Specialization",
+            command=lambda: self.add_specialization(spec_frame)
+        )
+        add_spec_btn.pack(pady=5)
         row += 1
-        ctk.CTkLabel(form, text="Company").grid(row=row, column=0, padx=5, pady=5)
-        self.company_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
         
+        # Grades Frame
+        grades_frame = ctk.CTkFrame(container)
+        grades_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.grades = []  # List to store grade entries
+        add_grade_btn = ctk.CTkButton(
+            grades_frame,
+            text="Add Grade",
+            command=lambda: self.add_grade(grades_frame)
+        )
+        add_grade_btn.pack(pady=5)
         row += 1
-        ctk.CTkLabel(form, text="Technical Grade").grid(row=row, column=0, padx=5, pady=5)
-        self.grade_input.grid(row=row, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Qualifications Section
+        self.create_section_header(container, "Qualifications", row)
+        row += 1
+        
+        # Qualifications Frame
+        qual_frame = ctk.CTkFrame(container)
+        qual_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.qualifications = []  # List to store qualification entries
+        add_qual_btn = ctk.CTkButton(
+            qual_frame,
+            text="Add Qualification",
+            command=lambda: self.add_qualification(qual_frame)
+        )
+        add_qual_btn.pack(pady=5)
+        row += 1
+        
+        # Education Section
+        self.create_section_header(container, "Education", row)
+        row += 1
+        
+        # Education Frame
+        edu_frame = ctk.CTkFrame(container)
+        edu_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.education = []  # List to store education entries
+        add_edu_btn = ctk.CTkButton(
+            edu_frame,
+            text="Add Education",
+            command=lambda: self.add_education(edu_frame)
+        )
+        add_edu_btn.pack(pady=5)
+        row += 1
+        
+        # Employment History Section
+        self.create_section_header(container, "Employment History", row)
+        row += 1
+        
+        # Employment Frame
+        emp_frame = ctk.CTkFrame(container)
+        emp_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.employment = []  # List to store employment entries
+        add_emp_btn = ctk.CTkButton(
+            emp_frame,
+            text="Add Employment",
+            command=lambda: self.add_employment(emp_frame)
+        )
+        add_emp_btn.pack(pady=5)
+        row += 1
+        
+        # Training Section
+        self.create_section_header(container, "Training", row)
+        row += 1
+        
+        # Training Frame
+        training_frame = ctk.CTkFrame(container)
+        training_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        
+        self.training = []  # List to store training entries
+        add_training_btn = ctk.CTkButton(
+            training_frame,
+            text="Add Training",
+            command=lambda: self.add_training(training_frame)
+        )
+        add_training_btn.pack(pady=5)
+        row += 1
         
         # Configure grid
-        form.grid_columnconfigure(1, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+        
+        # Buttons frame
+        buttons_frame = ctk.CTkFrame(container, fg_color="transparent")
+        buttons_frame.grid(row=row, column=0, columnspan=2, pady=20)
         
         # Save button
-        row += 1
-        save_button = ctk.CTkButton(form, text=translator.translations['en']['save'], command=self.save_engineer)
-        save_button.grid(row=row, column=0, columnspan=2, pady=20)
+        save_button = ctk.CTkButton(
+            buttons_frame,
+            text="Save",
+            command=self.save_engineer,
+            width=100
+        )
+        save_button.pack(side="left", padx=5)
+        
+        # Cancel button
+        cancel_button = ctk.CTkButton(
+            buttons_frame,
+            text="Cancel",
+            command=self.destroy,
+            width=100
+        )
+        cancel_button.pack(side="left", padx=5)
         
         # Load data if editing
         if engineer:
-            self.name_input.insert(0, engineer.person_name or "")
-            self.birth_date_input.insert(0, str(engineer.birth_date or ""))
-            self.address_input.insert(0, engineer.address or "")
-            self.company_input.insert(0, engineer.associated_company or "")
-            if engineer.technical_grades:
-                self.grade_input.set(engineer.technical_grades)
-        else:
-            # Set default date to current date
-            self.birth_date_input.insert(0, datetime.now().strftime("%Y-%m-%d"))
+            self.load_engineer_data(engineer)
+        
+        # Make dialog modal
+        self.transient(self.master)
+        self.grab_set()
+    
+    def create_section_header(self, parent, text, row):
+        header = ctk.CTkLabel(
+            parent,
+            text=text,
+            font=("Arial Bold", 14)
+        )
+        header.grid(row=row, column=0, columnspan=2, sticky="w", pady=(15, 5))
+    
+    def create_entry_row(self, parent, label, row, default=""):
+        label_widget = ctk.CTkLabel(
+            parent,
+            text=label,
+            font=("Arial", 12)
+        )
+        label_widget.grid(row=row, column=0, sticky="e", padx=(0, 10), pady=2)
+        
+        entry = ctk.CTkEntry(parent)
+        entry.grid(row=row, column=1, sticky="ew", pady=2)
+        entry.insert(0, default)
+        return entry
+    
+    def add_tech_area(self, parent):
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        entry = ctk.CTkEntry(frame, placeholder_text="Technical Area")
+        entry.pack(side="left", expand=True, fill="x", padx=5)
+        
+        remove_btn = ctk.CTkButton(
+            frame, text="×", width=30,
+            command=lambda: self.remove_item(frame, self.tech_areas)
+        )
+        remove_btn.pack(side="right", padx=5)
+        
+        self.tech_areas.append((frame, entry))
+    
+    def add_specialization(self, parent):
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        entry = ctk.CTkEntry(frame, placeholder_text="Specialization")
+        entry.pack(side="left", expand=True, fill="x", padx=5)
+        
+        remove_btn = ctk.CTkButton(
+            frame, text="×", width=30,
+            command=lambda: self.remove_item(frame, self.specializations)
+        )
+        remove_btn.pack(side="right", padx=5)
+        
+        self.specializations.append((frame, entry))
+    
+    def add_grade(self, parent):
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        entry = ctk.CTkComboBox(frame, values=["초급", "중급", "고급"])
+        entry.pack(side="left", expand=True, fill="x", padx=5)
+        
+        remove_btn = ctk.CTkButton(
+            frame, text="×", width=30,
+            command=lambda: self.remove_item(frame, self.grades)
+        )
+        remove_btn.pack(side="right", padx=5)
+        
+        self.grades.append((frame, entry))
+    
+    def add_qualification(self, parent):
+        # Create a frame for this qualification entry
+        entry_frame = ctk.CTkFrame(parent)
+        entry_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Title
+        title_label = ctk.CTkLabel(entry_frame, text="Title:", anchor="w")
+        title_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        title_entry = ctk.CTkEntry(entry_frame, width=200)
+        title_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Date
+        date_label = ctk.CTkLabel(entry_frame, text="Date:", anchor="w")
+        date_label.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        date_entry = ctk.CTkEntry(entry_frame, width=200, placeholder_text="YY.MM.DD")
+        date_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Registration Number
+        reg_label = ctk.CTkLabel(entry_frame, text="Reg. Number:", anchor="w")
+        reg_label.grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        reg_entry = ctk.CTkEntry(entry_frame, width=200)
+        reg_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            entry_frame,
+            text="✕",
+            width=30,
+            height=30,
+            command=lambda: self.remove_item(entry_frame, self.qualifications),
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.grid(row=0, column=2, padx=5, rowspan=3, sticky="ns")
+        
+        # Configure grid
+        entry_frame.grid_columnconfigure(1, weight=1)
+        
+        # Store references
+        self.qualifications.append((entry_frame, title_entry, date_entry, reg_entry))
+
+    def add_education(self, parent):
+        # Create a frame for this education entry
+        entry_frame = ctk.CTkFrame(parent)
+        entry_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Graduation Date
+        grad_label = ctk.CTkLabel(entry_frame, text="Graduation:", anchor="w")
+        grad_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        grad_entry = ctk.CTkEntry(entry_frame, width=200, placeholder_text="YY.MM.DD")
+        grad_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Institution
+        inst_label = ctk.CTkLabel(entry_frame, text="Institution:", anchor="w")
+        inst_label.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        inst_entry = ctk.CTkEntry(entry_frame, width=200)
+        inst_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Major
+        major_label = ctk.CTkLabel(entry_frame, text="Major:", anchor="w")
+        major_label.grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        major_entry = ctk.CTkEntry(entry_frame, width=200)
+        major_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Degree
+        degree_label = ctk.CTkLabel(entry_frame, text="Degree:", anchor="w")
+        degree_label.grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        degree_entry = ctk.CTkEntry(entry_frame, width=200)
+        degree_entry.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            entry_frame,
+            text="✕",
+            width=30,
+            height=30,
+            command=lambda: self.remove_item(entry_frame, self.education),
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.grid(row=0, column=2, padx=5, rowspan=4, sticky="ns")
+        
+        # Configure grid
+        entry_frame.grid_columnconfigure(1, weight=1)
+        
+        # Store references
+        self.education.append((entry_frame, grad_entry, inst_entry, major_entry, degree_entry))
+
+    def add_employment(self, parent):
+        # Create a frame for this employment entry
+        entry_frame = ctk.CTkFrame(parent)
+        entry_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Period
+        period_label = ctk.CTkLabel(entry_frame, text="Period:", anchor="w")
+        period_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        period_entry = ctk.CTkEntry(entry_frame, width=200, placeholder_text="YY.MM - YY.MM")
+        period_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Company
+        company_label = ctk.CTkLabel(entry_frame, text="Company:", anchor="w")
+        company_label.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        company_entry = ctk.CTkEntry(entry_frame, width=200)
+        company_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            entry_frame,
+            text="✕",
+            width=30,
+            height=30,
+            command=lambda: self.remove_item(entry_frame, self.employment),
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.grid(row=0, column=2, padx=5, rowspan=2, sticky="ns")
+        
+        # Configure grid
+        entry_frame.grid_columnconfigure(1, weight=1)
+        
+        # Store references
+        self.employment.append((entry_frame, period_entry, company_entry))
+
+    def add_training(self, parent):
+        # Create a frame for this training entry
+        entry_frame = ctk.CTkFrame(parent)
+        entry_frame.pack(fill="x", padx=5, pady=5)
+        
+        # Period
+        period_label = ctk.CTkLabel(entry_frame, text="Period:", anchor="w")
+        period_label.grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        period_entry = ctk.CTkEntry(entry_frame, width=200, placeholder_text="YY.MM - YY.MM")
+        period_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Course Name
+        course_label = ctk.CTkLabel(entry_frame, text="Course:", anchor="w")
+        course_label.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        course_entry = ctk.CTkEntry(entry_frame, width=200)
+        course_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Institution
+        inst_label = ctk.CTkLabel(entry_frame, text="Institution:", anchor="w")
+        inst_label.grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        inst_entry = ctk.CTkEntry(entry_frame, width=200)
+        inst_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Certificate Number
+        cert_label = ctk.CTkLabel(entry_frame, text="Cert. Number:", anchor="w")
+        cert_label.grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        cert_entry = ctk.CTkEntry(entry_frame, width=200)
+        cert_entry.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        
+        # Remove button
+        remove_btn = ctk.CTkButton(
+            entry_frame,
+            text="✕",
+            width=30,
+            height=30,
+            command=lambda: self.remove_item(entry_frame, self.training),
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.grid(row=0, column=2, padx=5, rowspan=4, sticky="ns")
+        
+        # Configure grid
+        entry_frame.grid_columnconfigure(1, weight=1)
+        
+        # Store references
+        self.training.append((entry_frame, period_entry, course_entry, inst_entry, cert_entry))
+
+    def remove_item(self, frame, items_list):
+        # Remove the frame from the UI
+        frame.destroy()
+        # Remove the item from our tracking list
+        for i, item in enumerate(items_list):
+            if item[0] == frame:
+                items_list.pop(i)
+                break
+    
+    def load_engineer_data(self, engineer):
+        # Load basic information
+        self.name_input.insert(0, engineer.person_name or "")
+        self.birth_date_input.insert(0, engineer.birth_date or "")
+        self.address_input.insert(0, engineer.address or "")
+        self.company_input.insert(0, engineer.associated_company or "")
+        
+        # Load technical grades
+        if engineer.technical_grades:
+            grades = json.loads(engineer.technical_grades)
+            for area in grades.get("technical_area", []):
+                self.add_tech_area(self.tech_areas[-1][0].master)
+                self.tech_areas[-1][1].insert(0, area)
+            
+            for spec in grades.get("specialization", []):
+                self.add_specialization(self.specializations[-1][0].master)
+                self.specializations[-1][1].insert(0, spec)
+            
+            for grade in grades.get("grade", []):
+                self.add_grade(self.grades[-1][0].master)
+                self.grades[-1][1].set(grade)
+        
+        # Load qualifications
+        for qual in engineer.qualifications:
+            self.add_qualification(self.qualifications[-1][0].master)
+            self.qualifications[-1][1].insert(0, qual.title)
+            self.qualifications[-1][2].insert(0, qual.acquisition_date)
+            self.qualifications[-1][3].insert(0, qual.registration_number)
+        
+        # Load education
+        for edu in engineer.education:
+            self.add_education(self.education[-1][0].master)
+            self.education[-1][1].insert(0, edu.graduation_date)
+            self.education[-1][2].insert(0, edu.institution)
+            self.education[-1][3].insert(0, edu.major)
+            self.education[-1][4].insert(0, edu.degree)
+        
+        # Load employment
+        for emp in engineer.employment:
+            self.add_employment(self.employment[-1][0].master)
+            self.employment[-1][1].insert(0, emp.period)
+            self.employment[-1][2].insert(0, emp.company)
+        
+        # Load training
+        for train in engineer.training:
+            self.add_training(self.training[-1][0].master)
+            self.training[-1][1].insert(0, train.period)
+            self.training[-1][2].insert(0, train.course_name)
+            self.training[-1][3].insert(0, train.institution)
+            self.training[-1][4].insert(0, train.certificate_number)
     
     def save_engineer(self):
         try:
-            if not self.engineer:
+            # Create or get engineer
+            if self.engineer is None:
                 self.engineer = Engineer()
             
-            name = self.name_input.get().strip()
-            birth_date = self.birth_date_input.get().strip()
-            
-            if not name or not birth_date:
-                notification.show_error("Name and birth date are required!", parent=self)
-                return
-            
-            try:
-                parsed_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
-            except ValueError:
-                notification.show_error("Invalid date format. Use YYYY-MM-DD", parent=self)
-                return
-            
-            self.engineer.person_name = name
-            self.engineer.birth_date = parsed_date
+            # Basic information
+            self.engineer.person_name = self.name_input.get()
+            self.engineer.birth_date = self.birth_date_input.get()
             self.engineer.address = self.address_input.get()
             self.engineer.associated_company = self.company_input.get()
-            self.engineer.technical_grades = self.grade_input.get()
+            self.engineer.currency_unit = self.currency_input.get()
+            
+            # Technical grades
+            tech_grades = {
+                "technical_area": [entry.get() for _, entry in self.tech_areas],
+                "specialization": [entry.get() for _, entry in self.specializations],
+                "grade": [entry.get() for _, entry in self.grades],
+                "construction_project_management": ["초급"],
+                "quality_management": ["초급"]
+            }
+            self.engineer.technical_grades = json.dumps(tech_grades)
             
             if not self.engineer.id:
                 self.session.add(self.engineer)
+                self.session.flush()  # Get the engineer ID
+            
+            # Clear existing relationships
+            self.session.query(Qualification).filter_by(engineer_id=self.engineer.id).delete()
+            self.session.query(Education).filter_by(engineer_id=self.engineer.id).delete()
+            self.session.query(Employment).filter_by(engineer_id=self.engineer.id).delete()
+            self.session.query(Training).filter_by(engineer_id=self.engineer.id).delete()
+            
+            # Save qualifications
+            for _, title_entry, date_entry, reg_entry in self.qualifications:
+                qual = Qualification(
+                    engineer_id=self.engineer.id,
+                    title=title_entry.get(),
+                    acquisition_date=date_entry.get(),
+                    registration_number=reg_entry.get()
+                )
+                self.session.add(qual)
+            
+            # Save education
+            for _, grad_date, institution, major, degree in self.education:
+                edu = Education(
+                    engineer_id=self.engineer.id,
+                    graduation_date=grad_date.get(),
+                    institution=institution.get(),
+                    major=major.get(),
+                    degree=degree.get()
+                )
+                self.session.add(edu)
+            
+            # Save employment
+            for _, period, company in self.employment:
+                emp = Employment(
+                    engineer_id=self.engineer.id,
+                    period=period.get(),
+                    company=company.get()
+                )
+                self.session.add(emp)
+            
+            # Save training
+            for _, period, course, institution, cert_num in self.training:
+                train = Training(
+                    engineer_id=self.engineer.id,
+                    period=period.get(),
+                    course_name=course.get(),
+                    institution=institution.get(),
+                    certificate_number=cert_num.get()
+                )
+                self.session.add(train)
             
             self.session.commit()
-            notification.show_success("Engineer data saved successfully!", parent=self)
+            
             if self.on_save:
                 self.on_save()
+            
+            notification.show_success("Engineer saved successfully")
             self.destroy()
             
         except Exception as e:
-            notification.show_error(f"Error saving engineer: {str(e)}", parent=self)
+            self.session.rollback()
+            notification.show_error(f"Error saving engineer: {str(e)}")
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+        
+        # Set this window as the main window for notifications
+        notification.set_main_window(self)
         
         # Configure window
         self.title("Engineer Management System")
@@ -346,7 +878,8 @@ class App(ctk.CTk):
         
         # Create SQLite database
         engine = create_engine('sqlite:///engineers.db')
-        Base.metadata.create_all(engine)
+        Base.metadata.drop_all(engine)  # Drop all tables first
+        Base.metadata.create_all(engine)  # Create tables with new schema
         Session = sessionmaker(bind=engine)
         self.session = Session()
         
@@ -596,6 +1129,16 @@ class App(ctk.CTk):
         # Action buttons frame (right side)
         actions_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
         actions_frame.grid(row=0, column=1, sticky="e")
+        
+        view_button = ctk.CTkButton(
+            actions_frame,
+            text="View Detail",
+            command=lambda: self.engineer_table.show_engineer_detail(self.engineer_table.get_selected_engineer()),
+            height=35,
+            width=100,
+            font=("Arial Bold", 12)
+        )
+        view_button.pack(side="left", padx=5)
         
         add_button = ctk.CTkButton(
             actions_frame,

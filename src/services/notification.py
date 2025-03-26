@@ -58,6 +58,7 @@ class CustomNotification(ctk.CTkFrame):
 
 class NotificationService:
     _instance = None
+    _main_window = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -68,6 +69,9 @@ class NotificationService:
     def _initialize(self):
         self.active_notifications = []
         self.notification_spacing = 10
+    
+    def set_main_window(self, window):
+        NotificationService._main_window = window
     
     def close_all_notifications(self):
         for notification in self.active_notifications[:]:
@@ -97,11 +101,7 @@ class NotificationService:
     
     def show_success(self, message, parent=None, duration=2000):
         if not parent:
-            # Find the main window
-            for widget in ctk.CTk.winfo_all():
-                if isinstance(widget, ctk.CTk):
-                    parent = widget
-                    break
+            parent = NotificationService._main_window
         
         notification = CustomNotification(
             message, icon_type="success",
@@ -112,11 +112,7 @@ class NotificationService:
     
     def show_error(self, message, parent=None):
         if not parent:
-            # Find the main window
-            for widget in ctk.CTk.winfo_all():
-                if isinstance(widget, ctk.CTk):
-                    parent = widget
-                    break
+            parent = NotificationService._main_window
         
         notification = CustomNotification(
             message, icon_type="error",
