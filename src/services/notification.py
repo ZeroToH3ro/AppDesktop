@@ -4,6 +4,11 @@ from PIL import Image, ImageDraw
 class CustomNotification(ctk.CTkFrame):
     def __init__(self, message, icon_type="success", parent=None, auto_close=True, duration=2000):
         super().__init__(parent)
+        self._message = message
+        self._icon_type = icon_type
+        self._auto_close = auto_close
+        self._duration = duration
+        
         self.configure(fg_color=("#2d325a", "#2d325a"))
         self.grid_columnconfigure(1, weight=1)
         
@@ -43,7 +48,7 @@ class CustomNotification(ctk.CTkFrame):
             self.close_button.grid(row=0, column=2, padx=(5, 10), pady=10)
         
         if auto_close:
-            self.after(duration, self.destroy)
+            self.after_id = self.after(duration, self.destroy)
 
 class NotificationService:
     _instance = None
@@ -66,11 +71,33 @@ class NotificationService:
     
     def _position_notification(self, notification):
         screen_width = notification.winfo_screenwidth()
-        screen_height = notification.winfo_screenheight()
         
-        notification.update_idletasks()
-        width = notification.winfo_width()
-        height = notification.winfo_height()
+        # Create a toplevel window for the notification
+        notification_window = ctk.CTkToplevel()
+        notification_window.overrideredirect(True)  # Remove window decorations
+        notification_window.attributes('-topmost', True)  # Keep on top
+        
+        # Create a frame inside the toplevel window
+        frame = ctk.CTkFrame(notification_window)
+        frame.pack(fill="both", expand=True)
+        
+        # Create a new notification in the frame
+        new_notification = CustomNotification(
+            notification._message,
+            icon_type=notification._icon_type,
+            parent=frame,
+            auto_close=notification._auto_close,
+            duration=notification._duration if hasattr(notification, '_duration') else 2000
+        )
+        new_notification.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
+        
+        # Destroy the original notification
+        notification.destroy()
+        
+        # Position the window
+        notification_window.update_idletasks()
+        width = notification_window.winfo_width()
+        height = notification_window.winfo_height()
         
         x = screen_width - width - 20
         y = 40
@@ -80,8 +107,18 @@ class NotificationService:
             if existing.winfo_exists():
                 y += existing.winfo_height() + self.notification_spacing
         
-        notification.place(x=x, y=y)
-        self.active_notifications.append(notification)
+        notification_window.geometry(f"+{x}+{y}")
+        self.active_notifications.append(notification_window)
+        
+        # Bind close event
+        def on_close():
+            if notification_window in self.active_notifications:
+                self.active_notifications.remove(notification_window)
+            notification_window.destroy()
+        
+        notification_window.protocol("WM_DELETE_WINDOW", on_close)
+        if hasattr(new_notification, 'after_id'):
+            notification_window.after(new_notification.after_id, on_close)
     
     def show_success(self, message, parent=None, duration=2000):
         notification = CustomNotification(

@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Date
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
 from src.services.translator import Translator
-from src.services.notification import NotificationService
+from src.services.notification import notification
 from src.widgets.date_picker import DatePicker
 import csv
 import math
@@ -20,7 +20,7 @@ ICON_SIZE = 20
 
 Base = declarative_base()
 translator = Translator()
-notification = NotificationService()
+notification = notification
 
 class Engineer(Base):
     __tablename__ = 'engineers'
@@ -133,35 +133,23 @@ class EngineerTable(ctk.CTkFrame):
                 checkbox = ctk.CTkCheckBox(
                     self.table_frame,
                     text="",
-                    command=lambda e=engineer: self.toggle_row_selection(e.id)
+                    command=lambda id=engineer.id: self.toggle_row_selection(id),
+                    width=20,
+                    height=20
                 )
                 checkbox.grid(row=row, column=0, padx=5, pady=2)
-                checkbox.select() if engineer.id in self.selected_rows else checkbox.deselect()
                 
-                # Add engineer data
-                ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(
-                    row=row, column=1, padx=5, pady=2, sticky="w"
-                )
-                ctk.CTkLabel(self.table_frame, text=engineer.person_name or "").grid(
-                    row=row, column=2, padx=5, pady=2, sticky="w"
-                )
-                ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date or "")).grid(
-                    row=row, column=3, padx=5, pady=2, sticky="w"
-                )
-                ctk.CTkLabel(self.table_frame, text=engineer.address or "").grid(
-                    row=row, column=4, padx=5, pady=2, sticky="w"
-                )
-                ctk.CTkLabel(self.table_frame, text=engineer.associated_company or "").grid(
-                    row=row, column=5, padx=5, pady=2, sticky="w"
-                )
-                ctk.CTkLabel(self.table_frame, text=engineer.technical_grades or "").grid(
-                    row=row, column=6, padx=5, pady=2, sticky="w"
-                )
+                # Display engineer data
+                ctk.CTkLabel(self.table_frame, text=str(engineer.id)).grid(row=row, column=1, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.person_name).grid(row=row, column=2, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=str(engineer.birth_date)).grid(row=row, column=3, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.address).grid(row=row, column=4, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.associated_company).grid(row=row, column=5, padx=5, pady=2)
+                ctk.CTkLabel(self.table_frame, text=engineer.technical_grades).grid(row=row, column=6, padx=5, pady=2)
             
-            # Update pagination controls
-            self.prev_button.configure(state="normal" if self.current_page > 1 else "disabled")
-            self.next_button.configure(state="normal" if self.current_page < self.total_pages else "disabled")
-            self.page_info.configure(text=f"Page {self.current_page} of {self.total_pages}")
+            # Update pagination state
+            if hasattr(self, 'on_page_change'):
+                self.on_page_change(self.current_page, self.total_pages)
         
         except Exception as e:
             notification.show_error(f"Error loading engineers: {str(e)}")
@@ -206,6 +194,9 @@ class EngineerTable(ctk.CTkFrame):
         else:
             self.selected_rows.add(engineer_id)
         self.load_data()
+
+    def set_page_change_callback(self, callback):
+        self.on_page_change = callback
 
 class EngineerDialog(ctk.CTkToplevel):
     def __init__(self, session, engineer=None, on_save=None):
@@ -314,13 +305,13 @@ class EngineerDialog(ctk.CTkToplevel):
             birth_date = self.birth_date_input.get().strip()
             
             if not name or not birth_date:
-                notification.show_error("Name and birth date are required!")
+                notification.show_error("Name and birth date are required!", parent=self)
                 return
             
             try:
                 parsed_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
             except ValueError:
-                notification.show_error("Invalid date format. Use YYYY-MM-DD")
+                notification.show_error("Invalid date format. Use YYYY-MM-DD", parent=self)
                 return
             
             self.engineer.person_name = name
@@ -333,13 +324,13 @@ class EngineerDialog(ctk.CTkToplevel):
                 self.session.add(self.engineer)
             
             self.session.commit()
+            notification.show_success("Engineer data saved successfully!", parent=self)
             if self.on_save:
                 self.on_save()
-            notification.show_success(f"Engineer {name} {'updated' if self.engineer.id else 'added'} successfully!")
             self.destroy()
             
         except Exception as e:
-            notification.show_error(f"Error saving engineer: {str(e)}")
+            notification.show_error(f"Error saving engineer: {str(e)}", parent=self)
 
 class App(ctk.CTk):
     def __init__(self):
@@ -554,11 +545,12 @@ class App(ctk.CTk):
         # Engineer table
         self.engineer_table = EngineerTable(self.content, self.session)
         self.engineer_table.grid(row=1, column=0, sticky="nsew")
+        self.engineer_table.set_page_change_callback(self.update_pagination)
         
         # Bottom frame for pagination and actions
         bottom_frame = ctk.CTkFrame(self.content, fg_color="transparent")
         bottom_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=20)
-        bottom_frame.grid_columnconfigure(0, weight=1)  # Make pagination expand
+        bottom_frame.grid_columnconfigure(0, weight=1)
         
         # Pagination frame (left side)
         pagination_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
@@ -575,31 +567,31 @@ class App(ctk.CTk):
         rows_per_page.set("25")
         rows_per_page.pack(side="left", padx=5)
         
-        prev_page = ctk.CTkButton(
+        self.prev_page = ctk.CTkButton(
             pagination_frame,
             text="←",
             width=35,
             height=35,
             command=self.engineer_table.prev_page
         )
-        prev_page.pack(side="left", padx=5)
+        self.prev_page.pack(side="left", padx=5)
         
-        page_label = ctk.CTkLabel(
+        self.page_info = ctk.CTkLabel(
             pagination_frame,
             text="Page 1 of 1",
             width=100,
             height=35
         )
-        page_label.pack(side="left", padx=5)
+        self.page_info.pack(side="left", padx=5)
         
-        next_page = ctk.CTkButton(
+        self.next_page = ctk.CTkButton(
             pagination_frame,
             text="→",
             width=35,
             height=35,
             command=self.engineer_table.next_page
         )
-        next_page.pack(side="left", padx=5)
+        self.next_page.pack(side="left", padx=5)
         
         # Action buttons frame (right side)
         actions_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
@@ -716,6 +708,11 @@ class App(ctk.CTk):
         if notification.show_confirmation("Are you sure you want to logout?"):
             # Add your logout logic here
             self.quit()  # For now, just quit the application
+
+    def update_pagination(self, current_page, total_pages):
+        self.prev_page.configure(state="normal" if current_page > 1 else "disabled")
+        self.next_page.configure(state="normal" if current_page < total_pages else "disabled")
+        self.page_info.configure(text=f"Page {current_page} of {total_pages}")
 
 if __name__ == "__main__":
     app = App()
