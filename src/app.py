@@ -76,11 +76,17 @@ class App(ctk.CTk):
         
         # Navigation items
         nav_items = [
-            ("Dashboard", "🏠"),
-            ("Engineers", "👥"),
-            ("Reports", "📊"),
-            ("Settings", "⚙️")
-        ]
+            ("Dashboard", "📊"),  # Chart for Dashboard
+            ("Engineers", "👷"),  # Construction worker for Engineers
+            ("Reports", "📄"),    # Document for Reports
+            ("Settings", "⚙️"),   # Gear remains for Settings
+            ("Import Data", "📂"), # Folder for Import File
+            ("Companies", "🏢"),    # Office building for Company
+            ("Projects", "📋"),    # Clipboard for Projects
+            ("Saved Combinations", "💾"), # Save icon for Saved Companies
+        ]   
+        
+        self.active_nav_item = None  # Track active navigation item
         
         for i, (text, icon) in enumerate(nav_items):
             # Create a frame for each nav item
@@ -90,16 +96,29 @@ class App(ctk.CTk):
             
             def create_hover_effect(frame, text, icon, command):
                 def on_enter(e):
+                    if self.active_nav_item != frame:
+                        frame.configure(fg_color=("gray70", "gray30"))
+                        icon_label.configure(fg_color=("gray70", "gray30"))
+                        text_label.configure(fg_color=("gray70", "gray30"))
+                
+                def on_leave(e):
+                    if self.active_nav_item != frame:
+                        frame.configure(fg_color="transparent")
+                        icon_label.configure(fg_color="transparent")
+                        text_label.configure(fg_color="transparent")
+                
+                def on_click(e):
+                    # Remove active state from previous item
+                    if self.active_nav_item:
+                        self.active_nav_item.configure(fg_color="transparent")
+                        self.active_nav_item.children['!ctklabel'].configure(fg_color="transparent")
+                        self.active_nav_item.children['!ctklabel2'].configure(fg_color="transparent")
+                    
+                    # Set new active item
+                    self.active_nav_item = frame
                     frame.configure(fg_color=("gray70", "gray30"))
                     icon_label.configure(fg_color=("gray70", "gray30"))
                     text_label.configure(fg_color=("gray70", "gray30"))
-                
-                def on_leave(e):
-                    frame.configure(fg_color="transparent")
-                    icon_label.configure(fg_color="transparent")
-                    text_label.configure(fg_color="transparent")
-                
-                def on_click(e):
                     command(text)
                 
                 # Icon label
