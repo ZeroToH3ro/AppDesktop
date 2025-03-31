@@ -146,210 +146,380 @@ class EngineerDialog(ctk.CTkToplevel):
     def add_relationship_section(self, title, row, add_method):
         section_frame = ctk.CTkFrame(self.container)
         section_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        section_frame.grid_columnconfigure(0, weight=1)
-        section_frame.grid_columnconfigure(1, weight=0)
+        section_frame.grid_columnconfigure(1, weight=1)
+        
+        # Title and Add button in header
         header = ctk.CTkLabel(section_frame, text=title, font=("Arial", 14, "bold"))
         header.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        add_button = ctk.CTkButton(section_frame, text=f"Add {title.rstrip('s')}", command=add_method)
+        add_button = ctk.CTkButton(
+            section_frame, 
+            text=f"Add {title.rstrip('s')}", 
+            command=add_method,
+            fg_color="#2980B9",
+            hover_color="#2573A7"
+        )
         add_button.grid(row=0, column=1, sticky="e", padx=5, pady=5)
-        input_container = ctk.CTkFrame(section_frame)
-        input_container.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        # Container for input fields
+        input_container = ctk.CTkFrame(section_frame, fg_color="#2C3E50")
+        input_container.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        input_container.grid_columnconfigure(0, weight=1)
+        
+        # Create initial input fields based on section type
+        if title == "Technical Grades":
+            self._create_tech_grade_fields(input_container)
+        elif title == "Technical Qualifications":
+            self._create_qualification_fields(input_container)
+        elif title == "Education":
+            self._create_education_fields(input_container)
+        elif title == "Technical Sector Participation":
+            self._create_tech_sector_fields(input_container)
+        elif title == "Job Sector Participation":
+            self._create_job_sector_fields(input_container)
+        
         self.input_containers[title] = input_container
         return row + 1
+
+    def _create_tech_grade_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        type_entry = ctk.CTkEntry(frame, placeholder_text="Grade Type", height=32)
+        type_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        field_entry = ctk.CTkEntry(frame, placeholder_text="Field", height=32)
+        field_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        grade_entry = ctk.CTkEntry(frame, placeholder_text="Grade", height=32)
+        grade_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_qualification_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        title_entry = ctk.CTkEntry(frame, placeholder_text="Title", height=32)
+        title_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        date_entry = DatePicker(frame)
+        date_entry.pack(side="left", padx=5)
+        
+        reg_entry = ctk.CTkEntry(frame, placeholder_text="Registration Number", height=32)
+        reg_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_education_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        grad_date_entry = DatePicker(frame)
+        grad_date_entry.pack(side="left", padx=5)
+        
+        school_entry = ctk.CTkEntry(frame, placeholder_text="School Name", height=32)
+        school_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        major_entry = ctk.CTkEntry(frame, placeholder_text="Major", height=32)
+        major_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        degree_entry = ctk.CTkEntry(frame, placeholder_text="Degree", height=32)
+        degree_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_tech_sector_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        sector_entry = ctk.CTkEntry(frame, placeholder_text="Technical Sector", height=32)
+        sector_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days", height=32)
+        days_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_job_sector_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        job_entry = ctk.CTkEntry(frame, placeholder_text="Job", height=32)
+        job_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days", height=32)
+        days_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        remove_btn.pack(side="right", padx=5)
 
     # **Add Methods for Relationships**
     def add_tech_grade(self):
         input_container = self.input_containers["Technical Grades"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        type_entry = ctk.CTkEntry(frame, placeholder_text="Grade Type")
-        type_entry.pack(side="left", padx=5, expand=True, fill="x")
-        field_entry = ctk.CTkEntry(frame, placeholder_text="Field")
-        field_entry.pack(side="left", padx=5, expand=True, fill="x")
-        grade_entry = ctk.CTkEntry(frame, placeholder_text="Grade")
-        grade_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'type': type_entry, 'field': field_entry, 'grade': grade_entry}
-        self.add_remove_button(frame, self.tech_grades, item)
-        self.tech_grades.append(item)
+        self._create_tech_grade_fields(input_container)
 
     def add_qualification(self):
         input_container = self.input_containers["Technical Qualifications"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        title_entry = ctk.CTkEntry(frame, placeholder_text="Title")
-        title_entry.pack(side="left", padx=5, expand=True, fill="x")
-        date_entry = DatePicker(frame)
-        date_entry.pack(side="left", padx=5)
-        reg_entry = ctk.CTkEntry(frame, placeholder_text="Registration Number")
-        reg_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'title': title_entry, 'date': date_entry, 'reg_num': reg_entry}
-        self.add_remove_button(frame, self.qualifications, item)
-        self.qualifications.append(item)
+        self._create_qualification_fields(input_container)
 
     def add_education(self):
         input_container = self.input_containers["Education"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        grad_date_entry = DatePicker(frame)
-        grad_date_entry.pack(side="left", padx=5)
-        school_entry = ctk.CTkEntry(frame, placeholder_text="School Name")
-        school_entry.pack(side="left", padx=5, expand=True, fill="x")
-        major_entry = ctk.CTkEntry(frame, placeholder_text="Major")
-        major_entry.pack(side="left", padx=5, expand=True, fill="x")
-        degree_entry = ctk.CTkEntry(frame, placeholder_text="Degree")
-        degree_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'grad_date': grad_date_entry, 'school': school_entry, 'major': major_entry, 'degree': degree_entry}
-        self.add_remove_button(frame, self.education, item)
-        self.education.append(item)
+        self._create_education_fields(input_container)
 
     def add_tech_sector(self):
         input_container = self.input_containers["Technical Sector Participation"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        sector_entry = ctk.CTkEntry(frame, placeholder_text="Technical Sector")
-        sector_entry.pack(side="left", padx=5, expand=True, fill="x")
-        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days")
-        days_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'sector': sector_entry, 'days': days_entry}
-        self.add_remove_button(frame, self.tech_sectors, item)
-        self.tech_sectors.append(item)
+        self._create_tech_sector_fields(input_container)
 
     def add_job_sector(self):
         input_container = self.input_containers["Job Sector Participation"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        job_entry = ctk.CTkEntry(frame, placeholder_text="Job")
-        job_entry.pack(side="left", padx=5, expand=True, fill="x")
-        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days")
-        days_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'job': job_entry, 'days': days_entry}
-        self.add_remove_button(frame, self.job_sectors, item)
-        self.job_sectors.append(item)
+        self._create_job_sector_fields(input_container)
 
     def add_specialized_field(self):
         input_container = self.input_containers["Specialized Field Participation"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        field_entry = ctk.CTkEntry(frame, placeholder_text="Specialized Field")
-        field_entry.pack(side="left", padx=5, expand=True, fill="x")
-        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days")
-        days_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'field': field_entry, 'days': days_entry}
-        self.add_remove_button(frame, self.specialized_fields, item)
-        self.specialized_fields.append(item)
+        self._create_specialized_field_fields(input_container)
 
     def add_construction_type(self):
         input_container = self.input_containers["Construction Type Participation"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        type_entry = ctk.CTkEntry(frame, placeholder_text="Construction Type")
-        type_entry.pack(side="left", padx=5, expand=True, fill="x")
-        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days")
-        days_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'type': type_entry, 'days': days_entry}
-        self.add_remove_button(frame, self.construction_types, item)
-        self.construction_types.append(item)
+        self._create_construction_type_fields(input_container)
 
     def add_training(self):
         input_container = self.input_containers["Education and Training"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        period_entry = ctk.CTkEntry(frame, placeholder_text="Training Period")
-        period_entry.pack(side="left", padx=5, expand=True, fill="x")
-        course_entry = ctk.CTkEntry(frame, placeholder_text="Course Name")
-        course_entry.pack(side="left", padx=5, expand=True, fill="x")
-        institution_entry = ctk.CTkEntry(frame, placeholder_text="Institution Name")
-        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
-        completion_entry = ctk.CTkEntry(frame, placeholder_text="Completion Number")
-        completion_entry.pack(side="left", padx=5, expand=True, fill="x")
-        field_entry = ctk.CTkEntry(frame, placeholder_text="Training Field")
-        field_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {
-            'period': period_entry, 'course': course_entry, 'institution': institution_entry,
-            'completion': completion_entry, 'field': field_entry
-        }
-        self.add_remove_button(frame, self.trainings, item)
-        self.trainings.append(item)
+        self._create_training_fields(input_container)
 
     def add_award(self):
         input_container = self.input_containers["Awards"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        date_entry = DatePicker(frame)
-        date_entry.pack(side="left", padx=5)
-        type_entry = ctk.CTkEntry(frame, placeholder_text="Type and Basis")
-        type_entry.pack(side="left", padx=5, expand=True, fill="x")
-        institution_entry = ctk.CTkEntry(frame, placeholder_text="Awarding Institution")
-        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'date': date_entry, 'type': type_entry, 'institution': institution_entry}
-        self.add_remove_button(frame, self.awards, item)
-        self.awards.append(item)
+        self._create_award_fields(input_container)
 
     def add_sanction(self):
         input_container = self.input_containers["Sanctions"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        points_entry = ctk.CTkEntry(frame, placeholder_text="Penalty Points")
-        points_entry.pack(side="left", padx=5, expand=True, fill="x")
-        date_entry = DatePicker(frame)
-        date_entry.pack(side="left", padx=5)
-        type_entry = ctk.CTkEntry(frame, placeholder_text="Type")
-        type_entry.pack(side="left", padx=5, expand=True, fill="x")
-        period_entry = ctk.CTkEntry(frame, placeholder_text="Sanction Period")
-        period_entry.pack(side="left", padx=5, expand=True, fill="x")
-        basis_entry = ctk.CTkEntry(frame, placeholder_text="Basis")
-        basis_entry.pack(side="left", padx=5, expand=True, fill="x")
-        institution_entry = ctk.CTkEntry(frame, placeholder_text="Sanctioning Institution")
-        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {
-            'points': points_entry, 'date': date_entry, 'type': type_entry,
-            'period': period_entry, 'basis': basis_entry, 'institution': institution_entry
-        }
-        self.add_remove_button(frame, self.sanctions, item)
-        self.sanctions.append(item)
+        self._create_sanction_fields(input_container)
 
     def add_workplace(self):
         input_container = self.input_containers["Workplace"]
-        frame = ctk.CTkFrame(input_container)
-        frame.pack(fill="x", padx=5, pady=2)
-        period_entry = ctk.CTkEntry(frame, placeholder_text="Experience Period")
-        period_entry.pack(side="left", padx=5, expand=True, fill="x")
-        company_entry = ctk.CTkEntry(frame, placeholder_text="Company Name")
-        company_entry.pack(side="left", padx=5, expand=True, fill="x")
-        item = {'period': period_entry, 'company': company_entry}
-        self.add_remove_button(frame, self.workplaces, item)
-        self.workplaces.append(item)
+        self._create_workplace_fields(input_container)
 
     def add_project_detail(self):
         input_container = self.input_containers["Project Details"]
-        frame = ctk.CTkFrame(input_container)
+        self._create_project_detail_fields(input_container)
+
+    def _create_specialized_field_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
         frame.pack(fill="x", padx=5, pady=2)
-        service_entry = ctk.CTkEntry(frame, placeholder_text="Service Name")
-        service_entry.pack(side="left", padx=5, expand=True, fill="x")
-        project_type_entry = ctk.CTkEntry(frame, placeholder_text="Project Type")
-        project_type_entry.pack(side="left", padx=5, expand=True, fill="x")
-        company_entry = ctk.CTkEntry(frame, placeholder_text="Company Name")
+        
+        field_entry = ctk.CTkEntry(frame, placeholder_text="Specialized Field", height=32)
+        field_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days", height=32)
+        days_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_construction_type_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        type_entry = ctk.CTkEntry(frame, placeholder_text="Construction Type", height=32)
+        type_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        days_entry = ctk.CTkEntry(frame, placeholder_text="Participation Days", height=32)
+        days_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_training_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        period_entry = ctk.CTkEntry(frame, placeholder_text="Training Period", height=32)
+        period_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        course_entry = ctk.CTkEntry(frame, placeholder_text="Course Name", height=32)
+        course_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        institution_entry = ctk.CTkEntry(frame, placeholder_text="Institution Name", height=32)
+        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        completion_entry = ctk.CTkEntry(frame, placeholder_text="Completion Number", height=32)
+        completion_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        field_entry = ctk.CTkEntry(frame, placeholder_text="Training Field", height=32)
+        field_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_award_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        date_entry = DatePicker(frame)
+        date_entry.pack(side="left", padx=5)
+        
+        type_entry = ctk.CTkEntry(frame, placeholder_text="Type and Basis", height=32)
+        type_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        institution_entry = ctk.CTkEntry(frame, placeholder_text="Awarding Institution", height=32)
+        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_sanction_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        points_entry = ctk.CTkEntry(frame, placeholder_text="Penalty Points", height=32)
+        points_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        date_entry = DatePicker(frame)
+        date_entry.pack(side="left", padx=5)
+        
+        type_entry = ctk.CTkEntry(frame, placeholder_text="Type", height=32)
+        type_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        period_entry = ctk.CTkEntry(frame, placeholder_text="Sanction Period", height=32)
+        period_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        basis_entry = ctk.CTkEntry(frame, placeholder_text="Basis", height=32)
+        basis_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        institution_entry = ctk.CTkEntry(frame, placeholder_text="Sanctioning Institution", height=32)
+        institution_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_workplace_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        period_entry = ctk.CTkEntry(frame, placeholder_text="Experience Period", height=32)
+        period_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        company_entry = ctk.CTkEntry(frame, placeholder_text="Company Name", height=32)
         company_entry.pack(side="left", padx=5, expand=True, fill="x")
-        contractor_entry = ctk.CTkEntry(frame, placeholder_text="Representative Contractor")
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
+
+    def _create_project_detail_fields(self, container):
+        frame = ctk.CTkFrame(container, fg_color="transparent")
+        frame.pack(fill="x", padx=5, pady=2)
+        
+        service_entry = ctk.CTkEntry(frame, placeholder_text="Service Name", height=32)
+        service_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        project_type_entry = ctk.CTkEntry(frame, placeholder_text="Project Type", height=32)
+        project_type_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        company_entry = ctk.CTkEntry(frame, placeholder_text="Company Name", height=32)
+        company_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
+        contractor_entry = ctk.CTkEntry(frame, placeholder_text="Representative Contractor", height=32)
         contractor_entry.pack(side="left", padx=5, expand=True, fill="x")
+        
         contract_date_entry = DatePicker(frame)
         contract_date_entry.pack(side="left", padx=5)
-        item = {
-            'service': service_entry, 'project_type': project_type_entry, 'company': company_entry,
-            'contractor': contractor_entry, 'contract_date': contract_date_entry
-        }
-        self.add_remove_button(frame, self.project_details, item)
-        self.project_details.append(item)
-
-    def add_remove_button(self, frame, items_list, item):
-        ctk.CTkButton(
-            frame, text="Remove", command=lambda: self.remove_item(frame, items_list, item), width=60,
-            fg_color="#E74C3C", hover_color="#C0392B"
-        ).pack(side="right", padx=5)
-
-    def remove_item(self, frame, items_list, item):
-        frame.destroy()
-        items_list.remove(item)
+        
+        remove_btn = ctk.CTkButton(
+            frame,
+            text="Remove",
+            width=80,
+            height=32,
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
+        )
+        remove_btn.pack(side="right", padx=5)
 
     def load_engineer_data(self, engineer):
         self.name_input.insert(0, engineer.name or "")
