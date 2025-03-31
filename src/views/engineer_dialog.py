@@ -207,8 +207,10 @@ class EngineerDialog(ctk.CTkToplevel):
         field_entry = ctk.CTkEntry(frame, placeholder_text="Field", height=32)
         field_entry.pack(side="left", padx=5, expand=True, fill="x")
         
-        grade_entry = ctk.CTkEntry(frame, placeholder_text="Grade", height=32)
-        grade_entry.pack(side="left", padx=5, expand=True, fill="x")
+        grade_options = ["Beginner", "Intermediate", "Advanced", "Special", "Technician"]
+        grade_dropdown = ctk.CTkComboBox(frame, values=grade_options, state="readonly", height=32)
+        grade_dropdown.set("Beginner")
+        grade_dropdown.pack(side="left", padx=5, expand=True, fill="x")
         
         remove_btn = ctk.CTkButton(
             frame,
@@ -216,7 +218,8 @@ class EngineerDialog(ctk.CTkToplevel):
             width=80,
             height=32,
             fg_color="#E74C3C",
-            hover_color="#C0392B"
+            hover_color="#C0392B",
+            command=lambda: frame.destroy()
         )
         remove_btn.pack(side="right", padx=5)
 
@@ -556,7 +559,7 @@ class EngineerDialog(ctk.CTkToplevel):
             self.add_tech_grade()
             self.tech_grades[-1]['type'].insert(0, grade.grade_type or "")
             self.tech_grades[-1]['field'].insert(0, grade.field or "")
-            self.tech_grades[-1]['grade'].insert(0, grade.grade or "")
+            self.tech_grades[-1]['grade'].set(grade.grade or "")
 
         for qual in engineer.technical_qualifications:
             self.add_qualification()
