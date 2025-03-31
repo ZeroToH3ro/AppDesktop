@@ -75,9 +75,9 @@ class EngineerDialog(ctk.CTkToplevel):
 
         self.responsible_technical_manager = self.create_entry_row(self.container, "Responsible Technical Manager", row)
         row += 1
-        self.experience = self.create_textbox_row(self.container, "Experience", row, height=100)
+        self.experience = self.create_textbox_row(self.container, "Experience Summary", row, height=100)
         row += 1
-        self.field_name = self.create_textbox_row(self.container, "Field Name", row, height=100)
+        self.field_name = self.create_textbox_row(self.container, "Expertise Area", row, height=100)
         row += 1
         self.evaluation_target = self.create_entry_row(self.container, "Evaluation Target", row)
         row += 1
@@ -88,7 +88,7 @@ class EngineerDialog(ctk.CTkToplevel):
         row += 1
         selected_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         selected_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        ctk.CTkLabel(selected_frame, text="Selected").grid(row=0, column=0, padx=5)
+        ctk.CTkLabel(selected_frame, text="Project Lead").grid(row=0, column=0, padx=5)
         self.selected_var = ctk.BooleanVar(value=False)
         self.selected_checkbox = ctk.CTkCheckBox(selected_frame, text="", variable=self.selected_var)
         self.selected_checkbox.grid(row=0, column=1, padx=5)
@@ -146,26 +146,18 @@ class EngineerDialog(ctk.CTkToplevel):
     def add_relationship_section(self, title, row, add_method):
         section_frame = ctk.CTkFrame(self.container)
         section_frame.grid(row=row, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        section_frame.grid_columnconfigure(1, weight=1)
         
-        # Title and Add button in header
-        header = ctk.CTkLabel(section_frame, text=title, font=("Arial", 14, "bold"))
-        header.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        add_button = ctk.CTkButton(
-            section_frame, 
-            text=f"Add {title.rstrip('s')}", 
-            command=add_method,
-            fg_color="#2980B9",
-            hover_color="#2573A7"
-        )
-        add_button.grid(row=0, column=1, sticky="e", padx=5, pady=5)
-
-        # Container for input fields
-        input_container = ctk.CTkFrame(section_frame, fg_color="#2C3E50")
-        input_container.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
-        input_container.grid_columnconfigure(0, weight=1)
+        # Header with title and add button
+        header_frame = ctk.CTkFrame(section_frame, fg_color="transparent")
+        header_frame.pack(fill="x", padx=5, pady=5)
+        ctk.CTkLabel(header_frame, text=title).pack(side="left")
         
-        # Create initial input fields based on section type
+        # Input container for fields
+        input_container = ctk.CTkFrame(section_frame, fg_color="transparent")
+        input_container.pack(fill="x", padx=5, pady=5)
+        self.input_containers[title] = input_container
+        
+        # Pre-create initial fields
         if title == "Technical Grades":
             self._create_tech_grade_fields(input_container)
         elif title == "Technical Qualifications":
@@ -176,8 +168,31 @@ class EngineerDialog(ctk.CTkToplevel):
             self._create_tech_sector_fields(input_container)
         elif title == "Job Sector Participation":
             self._create_job_sector_fields(input_container)
+        elif title == "Specialized Field Participation":
+            self._create_specialized_field_fields(input_container)
+        elif title == "Construction Type Participation":
+            self._create_construction_type_fields(input_container)
+        elif title == "Education and Training":
+            self._create_training_fields(input_container)
+        elif title == "Awards":
+            self._create_award_fields(input_container)
+        elif title == "Sanctions":
+            self._create_sanction_fields(input_container)
+        elif title == "Workplace":
+            self._create_workplace_fields(input_container)
+        elif title == "Project Details":
+            self._create_project_detail_fields(input_container)
+            
+        # Add button
+        ctk.CTkButton(
+            header_frame,
+            text=f"Add {title}",
+            command=add_method,
+            fg_color="#2980B9",
+            hover_color="#2573A7",
+            height=32
+        ).pack(side="right", padx=5)
         
-        self.input_containers[title] = input_container
         return row + 1
 
     def _create_tech_grade_fields(self, container):
