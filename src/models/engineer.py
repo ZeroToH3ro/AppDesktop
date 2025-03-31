@@ -1,26 +1,33 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Boolean
 from sqlalchemy.orm import relationship
 from .base import Base
 
 class Engineer(Base):
     __tablename__ = 'engineers'
     id = Column(Integer, primary_key=True)
-    person_name = Column(String)
-    birth_date = Column(Date)
+    name = Column(String)
+    company_name = Column(String)
+    date_of_birth = Column(Date)
     address = Column(String)
-    associated_company = Column(String)
-    currency_unit = Column(String, default='백만원')
-    technical_grades = Column(String)
-    position_title = Column(String)
-    expertise_area = Column(String)
-    project_lead = Column(String)
-    experience_summary = Column(String)
-    participation_days = Column(String)
-    participation_details = Column(String)
-    qualifications = relationship("Qualification", back_populates="engineer", cascade="all, delete-orphan")
+    position_and_rank = Column(String)
+    responsible_technical_manager = Column(String)
+    experience = Column(String)
+    field_name = Column(String)
+    evaluation_target = Column(String)
+    pdf_file = Column(String)
+    selected = Column(Boolean)
+    technical_grades = relationship("TechnicalGrade", back_populates="engineer", cascade="all, delete-orphan")
+    technical_qualifications = relationship("TechnicalQualification", back_populates="engineer", cascade="all, delete-orphan")
     education = relationship("Education", back_populates="engineer", cascade="all, delete-orphan")
-    employment = relationship("Employment", back_populates="engineer", cascade="all, delete-orphan")
-    training = relationship("Training", back_populates="engineer", cascade="all, delete-orphan")
+    technical_sector_participation = relationship("TechnicalSectorParticipation", back_populates="engineer", cascade="all, delete-orphan")
+    job_sector_participation = relationship("JobSectorParticipation", back_populates="engineer", cascade="all, delete-orphan")
+    specialized_field_participation = relationship("SpecializedFieldParticipation", back_populates="engineer", cascade="all, delete-orphan")
+    construction_type_participation = relationship("ConstructionTypeParticipation", back_populates="engineer", cascade="all, delete-orphan")
+    education_and_training = relationship("EducationAndTraining", back_populates="engineer", cascade="all, delete-orphan")
+    awards = relationship("Award", back_populates="engineer", cascade="all, delete-orphan")
+    sanctions = relationship("Sanction", back_populates="engineer", cascade="all, delete-orphan")
+    workplace = relationship("Workplace", back_populates="engineer", cascade="all, delete-orphan")
+    project_details = relationship("ProjectDetail", back_populates="engineer", cascade="all, delete-orphan")
 
 class Qualification(Base):
     __tablename__ = 'qualifications'

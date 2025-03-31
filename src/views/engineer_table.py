@@ -25,8 +25,8 @@ class EngineerTable(ctk.CTkFrame):
         header_frame.pack(fill="x", padx=2, pady=(2,0))
         
         # Configure header columns with equal width
-        headers = ["Select", "ID", "Name", "Birth Date", "Company", "Position", "Actions"]
-        column_widths = [60, 60, 150, 100, 150, 150, 200]  # Specify widths for each column
+        headers = ["Select", "ID", "Name", "Company", "Areas", "Projects", "Actions"]
+        column_widths = [60, 60, 150, 100, 150, 150, 150]  # Specify widths for each column
         
         for i, (header, width) in enumerate(zip(headers, column_widths)):
             header_cell = ctk.CTkFrame(header_frame, fg_color="transparent")
@@ -103,10 +103,10 @@ class EngineerTable(ctk.CTkFrame):
                 # Create data cells with proper text wrapping
                 cells = [
                     (0, str(engineer.id), 60),
-                    (1, engineer.person_name or "", 150),
-                    (2, engineer.birth_date or "", 100),
-                    (3, engineer.associated_company or "", 150),
-                    (4, engineer.position_title or "", 150)
+                    (1, engineer.name or "", 150),
+                    (2, engineer.company or "", 100),
+                    (3, engineer.expertise_area or "", 150),
+                    (4, engineer.project_lead or "", 150)
                 ]
                 
                 for col, text, width in cells:

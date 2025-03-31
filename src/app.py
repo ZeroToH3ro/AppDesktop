@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw
 from src.utils.db import init_database
 from src.views import EngineerTable, EngineerDialog
 from src.services.notification import notification
+from CTkMessagebox import CTkMessagebox
 
 # Constants
 SIDEBAR_WIDTH = 240
@@ -315,5 +316,14 @@ class App(ctk.CTk):
             ctk.set_appearance_mode("Dark")
 
     def logout(self):
-        # Add logout functionality here
-        pass
+        # Show confirmation dialog
+        msg = CTkMessagebox(
+            title="Confirm Logout",
+            message="Are you sure you want to logout?",
+            icon="question",
+            option_1="Cancel",
+            option_2="Logout"
+        )
+        
+        if msg.get() == "Logout":
+            self.destroy()
