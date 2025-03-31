@@ -16,7 +16,7 @@ class EngineerDialog(ctk.CTkToplevel):
         self.engineer = engineer if engineer else Engineer()
         self.on_save = on_save
         self.title("Edit Engineer" if engineer else "Add Engineer")
-        self.geometry("1000x800")
+        self.geometry("1120x800")
 
         # Initialize relationship lists
         self.tech_grades = []
@@ -634,18 +634,19 @@ class EngineerDialog(ctk.CTkToplevel):
             self.project_details[-1]['contractor'].insert(0, pd.representative_contractor or "")
             if pd.contract_date:
                 self.project_details[-1]['contract_date'].set_date(pd.contract_date)
-
+    # TODO: Fix date of birth
     def save_engineer(self):
         try:
             # Basic fields
-            name = self.name_input.get().strip()
-            birth_date = self.birth_date_input.get_date()
-            if not name or not birth_date:
-                notification.error("Name and Birth Date are required")
-                return
-
-            self.engineer.name = name
-            self.engineer.date_of_birth = birth_date
+            self.engineer.name = self.name_input.get().strip()
+            birth_date_str = self.birth_date_input.get_date()
+            if birth_date_str:
+                try:
+                    birth_date = datetime.strptime(birth_date_str, "%m/%d/%Y").date()
+                    self.engineer.date_of_birth = birth_date
+                except ValueError as e:
+                    print(f"Birth date: {birth_date_str}")
+                    print(f"Error parsing birth date: {e}")
             self.engineer.address = self.address_input.get().strip()
             self.engineer.company_name = self.company_input.get().strip()
             self.engineer.position_and_rank = self.position_input.get().strip()
@@ -772,13 +773,15 @@ class EngineerDialog(ctk.CTkToplevel):
             if not self.engineer.id:
                 self.session.add(self.engineer)
             self.session.commit()
-            notification.success("Engineer saved successfully")
+            # notification.success("Engineer saved successfully")
             if self.on_save:
                 self.on_save()
             self.destroy()
 
         except Exception as e:
-            notification.error(f"Error saving engineer: {str(e)}")
+            # notification.error(f"Error saving engineer: {str(e)}")
+            print(f"Error saving engineer: {str(e)}")
+            print(f"Date of birth: {self.engineer.date_of_birth}")
             self.session.rollback()
 
     def _upload_pdf(self):

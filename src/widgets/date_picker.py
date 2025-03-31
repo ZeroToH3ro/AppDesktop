@@ -65,13 +65,25 @@ class DatePicker(ctk.CTkFrame):
 
         if self.popup is not None:
             self.popup.destroy()
+            
         self.popup = ctk.CTkToplevel(self)
         self.popup.title("Select Date")
-        self.popup.geometry("+%d+%d" % (self.winfo_rootx(), self.winfo_rooty() + self.winfo_height()))
+        
+        # Make the popup window transient to the main window
+        self.popup.transient(self.winfo_toplevel())
+        
+        # Position the popup below the entry widget
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        self.popup.geometry(f"+{x}+{y}")
+        
+        # Set window properties
         self.popup.resizable(False, False)
-
-        self.popup.after(500, lambda: self.popup.focus())
-
+        self.popup.attributes('-topmost', True)
+        
+        # Grab focus to make the popup modal
+        self.popup.grab_set()
+        
         self.current_year = datetime.now().year
         self.current_month = datetime.now().month
         self.build_calendar()
@@ -141,9 +153,26 @@ class DatePicker(ctk.CTkFrame):
                     lbl.grid(row=week, column=day_col)
                 else:
                     if ctk.get_appearance_mode() == "Light":
-                        btn = ctk.CTkButton(self.calendar_frame, text=str(day), width=3, command=lambda day=day: self.select_date(day), fg_color="transparent", text_color="black", hover_color="#3b8ed0")
+                        btn = ctk.CTkButton(
+                            self.calendar_frame,
+                            text=str(day),
+                            width=30,
+                            height=30,
+                            command=lambda d=day: self.select_date(d),
+                            fg_color="transparent",
+                            text_color="black",
+                            hover_color="#3b8ed0"
+                        )
                     else:
-                        btn = ctk.CTkButton(self.calendar_frame, text=str(day), width=3, command=lambda day=day: self.select_date(day), fg_color="transparent")
+                        btn = ctk.CTkButton(
+                            self.calendar_frame,
+                            text=str(day),
+                            width=30,
+                            height=30,
+                            command=lambda d=day: self.select_date(d),
+                            fg_color="transparent",
+                            hover_color="#1f538d"
+                        )
                     btn.grid(row=week, column=day_col)
                     day += 1
 
@@ -187,16 +216,21 @@ class DatePicker(ctk.CTkFrame):
         Sets the selected date in the date entry field and closes the calendar popup.
         """
 
-        self.selected_date = datetime(self.current_year, self.current_month, day)
-        # Temporarily enable the entry to set the date
-        self.date_entry.configure(state='normal')
-        self.date_entry.delete(0, tk.END)
-        self.date_entry.insert(0, self.selected_date.strftime(self.date_format))
-        # Restore the disabled state if necessary
-        if not self.allow_manual_input:
-            self.date_entry.configure(state='disabled')
-        self.popup.destroy()
-        self.popup = None
+        try:
+            self.selected_date = datetime(self.current_year, self.current_month, day)
+            # Temporarily enable the entry to set the date
+            self.date_entry.configure(state='normal')
+            self.date_entry.delete(0, tk.END)
+            self.date_entry.insert(0, self.selected_date.strftime(self.date_format))
+            # Restore the disabled state if necessary
+            if not self.allow_manual_input:
+                self.date_entry.configure(state='disabled')
+            if self.popup:
+                self.popup.grab_release()
+                self.popup.destroy()
+                self.popup = None
+        except Exception as e:
+            print(f"Error selecting date: {e}")
 
     def get_date(self):
         """
