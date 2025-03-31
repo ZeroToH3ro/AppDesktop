@@ -75,6 +75,8 @@ class EngineerDialog(ctk.CTkToplevel):
 
         self.responsible_technical_manager = self.create_entry_row(self.container, "Responsible Technical Manager", row)
         row += 1
+        self.field_name = self.create_entry_row(self.container, "Field Name", row)
+        row += 1
         self.experience = self.create_textbox_row(self.container, "Experience Summary", row, height=100)
         row += 1
         self.field_name = self.create_textbox_row(self.container, "Expertise Area", row, height=100)
