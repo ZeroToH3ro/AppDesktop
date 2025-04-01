@@ -6,7 +6,7 @@ from src.services.notification import notification
 from CTkMessagebox import CTkMessagebox
 
 # Constants
-SIDEBAR_WIDTH = 240
+SIDEBAR_WIDTH = 200
 ICON_SIZE = 20
 
 # Theme icons
@@ -55,11 +55,15 @@ class App(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self, width=SIDEBAR_WIDTH, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         self.sidebar.grid_propagate(False)  # Prevent sidebar from resizing
-        self.sidebar.grid_rowconfigure(4, weight=1)
+        
+        # Configure sidebar grid
+        self.sidebar.grid_rowconfigure(1, weight=1)  # Make nav_frame expandable
+        self.sidebar.grid_columnconfigure(0, weight=1)
         
         # Profile section
         profile_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        profile_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        profile_frame.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        profile_frame.grid_columnconfigure(0, weight=1)  # Center content
         
         # Create circular profile image
         profile_size = 80
@@ -74,31 +78,33 @@ class App(ctk.CTk):
             size=(profile_size, profile_size)
         )
         
-        profile_label = ctk.CTkLabel(
-            profile_frame,
-            image=self.profile_photo,
-            text=""
-        )
+        profile_label = ctk.CTkLabel(profile_frame, text="", image=self.profile_photo)
         profile_label.grid(row=0, column=0, pady=(0, 10))
         
-        name_label = ctk.CTkLabel(
+        # Profile name
+        profile_name = ctk.CTkLabel(
             profile_frame,
             text="Admin User",
-            font=("Arial Bold", 16)
+            font=("Arial Bold", 16),
+            text_color="white",
+            anchor="center"
         )
-        name_label.grid(row=1, column=0)
+        profile_name.grid(row=1, column=0)
         
-        role_label = ctk.CTkLabel(
+        # Profile role
+        profile_role = ctk.CTkLabel(
             profile_frame,
             text="System Administrator",
             font=("Arial", 12),
-            text_color="gray"
+            text_color="white",
+            anchor="center"
         )
-        role_label.grid(row=2, column=0)
+        profile_role.grid(row=2, column=0)
         
         # Navigation section
         nav_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        nav_frame.grid(row=1, column=0, padx=10, sticky="ew")
+        nav_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        nav_frame.grid_columnconfigure(0, weight=1)
         
         # Navigation items
         nav_items = [
@@ -123,30 +129,24 @@ class App(ctk.CTk):
             def create_hover_effect(frame, text, icon, command):
                 def on_enter(e):
                     if self.active_nav_item != frame:
-                        frame.configure(fg_color=("gray70", "gray30"))
-                        icon_label.configure(fg_color=("gray70", "gray30"))
-                        text_label.configure(fg_color=("gray70", "gray30"))
-                
+                        frame.configure(fg_color="gray20")
+                        icon_label.configure(text_color="white")
+                        text_label.configure(text_color="white")
+
                 def on_leave(e):
                     if self.active_nav_item != frame:
                         frame.configure(fg_color="transparent")
-                        icon_label.configure(fg_color="transparent")
-                        text_label.configure(fg_color="transparent")
-                
+                        icon_label.configure(text_color="gray70")
+                        text_label.configure(text_color="gray70")
+
                 def on_click(e):
                     # Remove active state from previous item
                     if self.active_nav_item:
                         self.active_nav_item.configure(fg_color="transparent")
-                        self.active_nav_item.children['!ctklabel'].configure(fg_color="transparent")
-                        self.active_nav_item.children['!ctklabel2'].configure(fg_color="transparent")
-                    
-                    # Set new active item
+                    frame.configure(fg_color="gray20")
                     self.active_nav_item = frame
-                    frame.configure(fg_color=("gray70", "gray30"))
-                    icon_label.configure(fg_color=("gray70", "gray30"))
-                    text_label.configure(fg_color=("gray70", "gray30"))
                     command(text)
-                
+
                 # Icon label
                 icon_label = ctk.CTkLabel(
                     frame,
@@ -191,7 +191,8 @@ class App(ctk.CTk):
         
         # Bottom buttons frame
         bottom_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        bottom_frame.grid(row=4, column=0, padx=20, pady=20, sticky="sew")
+        bottom_frame.grid(row=2, column=0, padx=20, pady=20, sticky="sew")  # stick to south
+        bottom_frame.grid_columnconfigure(0, weight=1)
         
         # Logout button
         logout_button = ctk.CTkButton(
@@ -200,10 +201,11 @@ class App(ctk.CTk):
             command=self.logout,
             font=("Arial Bold", 13),
             height=35,
+            width=160,  # Fixed width for buttons
             fg_color="#2980B9",
             hover_color="#2471A3"
         )
-        logout_button.grid(row=0, column=0, pady=(0, 10), sticky="ew")
+        logout_button.grid(row=0, column=0, pady=(0, 10))
         
         # Quit button
         quit_button = ctk.CTkButton(
@@ -212,10 +214,11 @@ class App(ctk.CTk):
             command=self.quit,
             font=("Arial Bold", 13),
             height=35,
+            width=160,  # Fixed width for buttons
             fg_color="#E74C3C",
             hover_color="#C0392B"
         )
-        quit_button.grid(row=1, column=0, sticky="ew")
+        quit_button.grid(row=1, column=0, pady=(0, 20))
         
         # Main content area
         self.content = ctk.CTkFrame(self)
