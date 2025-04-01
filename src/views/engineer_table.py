@@ -16,42 +16,31 @@ class EngineerTable(ctk.CTkFrame):
         self.total_pages = 1
         self.selected_rows = set()
         
-        # Column widths
-        self.column_widths = [60, 60, 200, 150, 200, 200, 200]
+        # Column configurations with relative weights
+        self.columns = [
+            {"name": "Select", "width": 60, "weight": 0},
+            {"name": "ID", "width": 60, "weight": 0},
+            {"name": "Name", "width": 200, "weight": 2},
+            {"name": "Company", "width": 150, "weight": 2},
+            {"name": "Areas", "width": 200, "weight": 2},
+            {"name": "Projects", "width": 200, "weight": 2},
+            {"name": "Actions", "width": 200, "weight": 0}
+        ]
+        
+        # Configure main frame to expand
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
         
         # Create table container with border
-        self.table_container = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10, border_width=1, border_color="#3F3F3F")
-        self.table_container.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Configure grid weights for the container
+        self.table_container = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=8)
+        self.table_container.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        
+        # Configure table container to expand
         self.table_container.grid_columnconfigure(0, weight=1)
         self.table_container.grid_rowconfigure(1, weight=1)
         
         # Create header
-        header_frame = ctk.CTkFrame(self.table_container, fg_color="#252525", corner_radius=0, height=45)
-        header_frame.grid(row=0, column=0, sticky="ew", padx=1, pady=(1,0))
-        header_frame.grid_propagate(False)
-        
-        # Configure header columns with equal width
-        headers = ["Select", "ID", "Name", "Company", "Areas", "Projects", "Actions"]
-        
-        for i, (header, width) in enumerate(zip(headers, self.column_widths)):
-            # Create header cell with border
-            header_cell = ctk.CTkFrame(header_frame, fg_color="#252525", border_width=1, border_color="#3F3F3F")
-            header_cell.grid(row=0, column=i, sticky="nsew")
-            header_cell.grid_columnconfigure(0, weight=1)
-            
-            label = ctk.CTkLabel(
-                header_cell, 
-                text=header, 
-                font=("Arial Bold", 13),
-                text_color="#E0E0E0",
-                padx=10,
-                pady=10
-            )
-            label.pack(fill="both", expand=True)
-            
-            header_frame.grid_columnconfigure(i, weight=0, minsize=width)
+        self._create_header()
         
         # Create scrollable frame for table content
         self.table_frame = ctk.CTkScrollableFrame(
@@ -59,59 +48,62 @@ class EngineerTable(ctk.CTkFrame):
             fg_color="transparent",
             corner_radius=0
         )
-        self.table_frame.grid(row=1, column=0, sticky="nsew", padx=2, pady=(0,2))
+        self.table_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Configure grid columns in table frame to match header
-        for i, width in enumerate(self.column_widths):
-            self.table_frame.grid_columnconfigure(i, weight=0, minsize=width)
+        # Configure column weights in table frame
+        for i, col in enumerate(self.columns):
+            self.table_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
+            
+    def _create_header(self):
+        header_frame = ctk.CTkFrame(self.table_container, fg_color="#252525", corner_radius=0)
+        header_frame.grid(row=0, column=0, sticky="ew")
         
-        self.load_data()
-    
+        # Configure header columns with weights
+        for i, col in enumerate(self.columns):
+            header_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
+            
+            header_cell = ctk.CTkFrame(header_frame, fg_color="#2C2C2C", corner_radius=0)
+            header_cell.grid(row=0, column=i, sticky="nsew", padx=(0, 1), pady=(0, 1))
+            header_cell.grid_columnconfigure(0, weight=1)
+            
+            label = ctk.CTkLabel(
+                header_cell,
+                text=col["name"],
+                font=("Arial Bold", 12),
+                text_color="#E0E0E0",
+                anchor="center"
+            )
+            label.grid(row=0, column=0, sticky="nsew", padx=10, pady=12)
+
     def load_data(self):
         try:
             # Clear existing table
             for widget in self.table_frame.grid_slaves():
                 widget.destroy()
             
-            # Calculate offset and limit
+            # Get engineers for current page
             offset = (self.current_page - 1) * self.rows_per_page
+            engineers = self.session.query(Engineer).offset(offset).limit(self.rows_per_page).all()
             
-            # Get total count
+            # Get total count for pagination
             total_count = self.session.query(Engineer).count()
             self.total_pages = math.ceil(total_count / self.rows_per_page)
             
-            # Get engineers for current page
-            engineers = self.session.query(Engineer).offset(offset).limit(self.rows_per_page).all()
-            
-            # Configure grid weights for the table frame
-            for i in range(len(self.column_widths)):
-                self.table_frame.grid_columnconfigure(i, weight=1, minsize=self.column_widths[i])
-            
-            # Insert data
+            # Insert data rows
             for row_idx, engineer in enumerate(engineers):
-                row_color = "#2d2d2d" if row_idx % 2 == 0 else "#333333"
+                row_color = "#2A2A2A" if row_idx % 2 == 0 else "#262626"
                 
-                # Create row container with hover effect
-                row_frame = ctk.CTkFrame(self.table_frame, fg_color=row_color, corner_radius=0, height=45)
-                row_frame.grid(row=row_idx, column=0, columnspan=len(self.column_widths), sticky="ew")
-                row_frame.grid_propagate(False)
-
-                # Bind hover events
-                def on_enter(e, frame=row_frame):
-                    frame.configure(fg_color="#2A2A2A")
-                def on_leave(e, frame=row_frame, color=row_color):
-                    frame.configure(fg_color=color)
+                # Create row container
+                row_frame = ctk.CTkFrame(self.table_frame, fg_color=row_color, corner_radius=0)
+                row_frame.grid(row=row_idx, column=0, columnspan=len(self.columns), sticky="ew")
                 
-                row_frame.bind("<Enter>", on_enter)
-                row_frame.bind("<Leave>", on_leave)
+                # Configure row columns with weights
+                for i, col in enumerate(self.columns):
+                    row_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
                 
-                # Configure row columns
-                for i in range(len(self.column_widths)):
-                    row_frame.grid_columnconfigure(i, weight=1, minsize=self.column_widths[i])
-                
-                # Create checkbox cell with border
-                checkbox_cell = ctk.CTkFrame(row_frame, fg_color="transparent", border_width=1, border_color="#3F3F3F")
-                checkbox_cell.grid(row=0, column=0, sticky="nsew")
+                # Checkbox cell
+                checkbox_cell = ctk.CTkFrame(row_frame, fg_color="transparent", corner_radius=0)
+                checkbox_cell.grid(row=0, column=0, sticky="nsew", padx=(0, 1), pady=(0, 1))
                 
                 checkbox = ctk.CTkCheckBox(
                     checkbox_cell,
@@ -124,9 +116,9 @@ class EngineerTable(ctk.CTkFrame):
                     border_color="#4F4F4F",
                     corner_radius=3
                 )
-                checkbox.pack(padx=10, pady=10)
+                checkbox.pack(expand=True, padx=10, pady=10)
                 
-                # Create data cells with borders
+                # Data cells
                 cells = [
                     (0, str(engineer.id)),
                     (1, engineer.name or ""),
@@ -136,79 +128,78 @@ class EngineerTable(ctk.CTkFrame):
                 ]
                 
                 for col, text in cells:
-                    cell = ctk.CTkFrame(row_frame, fg_color="transparent", border_width=1, border_color="#3F3F3F")
-                    cell.grid(row=0, column=col+1, sticky="nsew")
+                    cell = ctk.CTkFrame(row_frame, fg_color="transparent", corner_radius=0)
+                    cell.grid(row=0, column=col+1, sticky="nsew", padx=(0, 1), pady=(0, 1))
+                    cell.grid_columnconfigure(0, weight=1)
                     
                     label = ctk.CTkLabel(
                         cell,
                         text=text,
                         anchor="w",
-                        wraplength=self.column_widths[col+1]-20,
+                        wraplength=0,  # Let the text wrap naturally
                         justify="left",
-                        padx=12,
-                        pady=5,
                         font=("Arial", 12),
-                        text_color="#E0E0E0"
+                        text_color="#D0D0D0"
                     )
-                    label.pack(fill="both", expand=True)
+                    label.grid(row=0, column=0, sticky="nsew", padx=12, pady=10)
                 
-                # Create actions cell with border
-                actions_cell = ctk.CTkFrame(row_frame, fg_color="transparent", border_width=1, border_color="#3F3F3F")
-                actions_cell.grid(row=0, column=len(cells)+1, sticky="nsew")
+                # Actions cell with buttons
+                actions_frame = self._create_actions_frame(row_frame, engineer)
+                actions_frame.grid(row=0, column=len(cells)+1, sticky="nsew", padx=(0, 1), pady=(0, 1))
                 
-                # Action buttons container with better spacing
-                actions_frame = ctk.CTkFrame(actions_cell, fg_color="transparent")
-                actions_frame.pack(padx=5, pady=5)
-                
-                # View button
-                view_btn = ctk.CTkButton(
-                    actions_frame,
-                    text="View",
-                    command=lambda e=engineer: self.show_engineer_detail(e),
-                    width=55,
-                    height=28,
-                    fg_color="#2ECC71",
-                    hover_color="#27AE60",
-                    corner_radius=4,
-                    font=("Arial", 12)
-                )
-                view_btn.pack(side="left", padx=2)
-                
-                # Edit button
-                edit_btn = ctk.CTkButton(
-                    actions_frame,
-                    text="Edit",
-                    command=lambda e=engineer: self.edit_engineer(e),
-                    width=55,
-                    height=28,
-                    fg_color="#3498DB",
-                    hover_color="#2980B9",
-                    corner_radius=4,
-                    font=("Arial", 12)
-                )
-                edit_btn.pack(side="left", padx=2)
-                
-                # Delete button
-                delete_btn = ctk.CTkButton(
-                    actions_frame,
-                    text="Delete",
-                    command=lambda e=engineer: self.delete_single_engineer(e),
-                    width=55,
-                    height=28,
-                    fg_color="#E74C3C",
-                    hover_color="#C0392B",
-                    corner_radius=4,
-                    font=("Arial", 12)
-                )
-                delete_btn.pack(side="left", padx=2)
-            
             # Update pagination state
             if hasattr(self, 'on_page_change'):
                 self.on_page_change(self.current_page, self.total_pages)
-        
+                
         except Exception as e:
-            # notification.show_error(f"Error loading engineers: {str(e)}")
             print(f"Error loading engineers: {str(e)}")
+
+    def _create_actions_frame(self, parent, engineer):
+        actions_frame = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
+        actions_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        
+        # Button styling
+        button_style = {
+            "height": 28,
+            "width": 55,
+            "corner_radius": 4,
+            "font": ("Arial", 12)
+        }
+        
+        # View button
+        view_btn = ctk.CTkButton(
+            actions_frame,
+            text="View",
+            command=lambda e=engineer: self.show_details(e),
+            fg_color="#2980B9",
+            hover_color="#2573A7",
+            **button_style
+        )
+        view_btn.grid(row=0, column=0, padx=2, pady=6)
+        
+        # Edit button
+        edit_btn = ctk.CTkButton(
+            actions_frame,
+            text="Edit",
+            command=lambda e=engineer: self.edit_engineer(e),
+            fg_color="#27AE60",
+            hover_color="#219A52",
+            **button_style
+        )
+        edit_btn.grid(row=0, column=1, padx=2, pady=6)
+        
+        # Delete button
+        delete_btn = ctk.CTkButton(
+            actions_frame,
+            text="Delete",
+            command=lambda e=engineer: self.delete_engineer(e),
+            fg_color="#E74C3C",
+            hover_color="#C0392B",
+            **button_style
+        )
+        delete_btn.grid(row=0, column=2, padx=2, pady=6)
+        
+        return actions_frame
     
     def apply_filter(self, filter_text=""):
         self.filter_text = filter_text.lower()
@@ -248,7 +239,7 @@ class EngineerTable(ctk.CTkFrame):
     def set_page_change_callback(self, callback):
         self.on_page_change = callback
     
-    def show_engineer_detail(self, engineer):
+    def show_details(self, engineer):
         EngineerDetailDialog(self, engineer)
     
     def get_selected_engineer(self):
@@ -257,7 +248,7 @@ class EngineerTable(ctk.CTkFrame):
             return self.session.query(Engineer).get(engineer_id)
         return None
     
-    def delete_single_engineer(self, engineer):
+    def delete_engineer(self, engineer):
         try:
             self.session.delete(engineer)
             self.session.commit()
