@@ -20,11 +20,11 @@ class EngineerTable(ctk.CTkFrame):
         self.columns = [
             {"name": "Select", "width": 60, "weight": 0},
             {"name": "ID", "width": 60, "weight": 0},
-            {"name": "Name", "width": 200, "weight": 2},
+            {"name": "Name", "width": 180, "weight": 2},
             {"name": "Company", "width": 150, "weight": 2},
-            {"name": "Areas", "width": 200, "weight": 2},
-            {"name": "Projects", "width": 200, "weight": 2},
-            {"name": "Actions", "width": 200, "weight": 0}
+            {"name": "Areas", "width": 150, "weight": 2},
+            {"name": "Projects", "width": 140, "weight": 2},
+            {"name": "Actions", "width": 300, "weight": 0}
         ]
         
         # Configure main frame to expand
@@ -156,12 +156,15 @@ class EngineerTable(ctk.CTkFrame):
 
     def _create_actions_frame(self, parent, engineer):
         actions_frame = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        actions_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        
+        # Configure all columns with equal weight
+        for i in range(3):
+            actions_frame.grid_columnconfigure(i, weight=1)
         
         # Button styling
         button_style = {
             "height": 28,
-            "width": 55,
+            "width": 65,  # Increased button width
             "corner_radius": 4,
             "font": ("Arial", 12)
         }
@@ -175,7 +178,7 @@ class EngineerTable(ctk.CTkFrame):
             hover_color="#2573A7",
             **button_style
         )
-        view_btn.grid(row=0, column=0, padx=2, pady=6)
+        view_btn.grid(row=0, column=0, padx=(5, 2), pady=6)  # Adjusted padding
         
         # Edit button
         edit_btn = ctk.CTkButton(
@@ -197,7 +200,7 @@ class EngineerTable(ctk.CTkFrame):
             hover_color="#C0392B",
             **button_style
         )
-        delete_btn.grid(row=0, column=2, padx=2, pady=6)
+        delete_btn.grid(row=0, column=2, padx=(2, 5), pady=6)  # Adjusted padding
         
         return actions_frame
     
