@@ -277,7 +277,7 @@ class App(ctk.CTk):
         
         # Create pagination frame
         pagination_frame = ctk.CTkFrame(self.content, fg_color="transparent")
-        pagination_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        pagination_frame.grid(row=2, column=0, sticky="ew", pady=(10, 20))  # Add bottom padding
         pagination_frame.grid_columnconfigure((0,1,2,3,4), weight=1)
         
         # Rows per page dropdown
