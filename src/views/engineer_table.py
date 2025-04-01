@@ -16,15 +16,15 @@ class EngineerTable(ctk.CTkFrame):
         self.total_pages = 1
         self.selected_rows = set()
         
-        # Column configurations with relative weights
+        # Column configurations with relative weights for responsive layout
         self.columns = [
-            {"name": "Select", "width": 60, "weight": 0},
-            {"name": "ID", "width": 60, "weight": 0},
-            {"name": "Name", "width": 180, "weight": 2},
-            {"name": "Company", "width": 150, "weight": 2},
-            {"name": "Areas", "width": 150, "weight": 2},
-            {"name": "Projects", "width": 140, "weight": 2},
-            {"name": "Actions", "width": 300, "weight": 0}
+            {"name": "Select", "width": 60, "weight": 0, "min_width": 60},
+            {"name": "ID", "width": 60, "weight": 0, "min_width": 60},
+            {"name": "Name", "width": 180, "weight": 3, "min_width": 150},
+            {"name": "Company", "width": 150, "weight": 2, "min_width": 120},
+            {"name": "Areas", "width": 150, "weight": 2, "min_width": 120},
+            {"name": "Projects", "width": 140, "weight": 2, "min_width": 120},
+            {"name": "Actions", "width": 300, "weight": 0, "min_width": 300}
         ]
         
         # Configure main frame to expand
@@ -52,15 +52,35 @@ class EngineerTable(ctk.CTkFrame):
         
         # Configure column weights in table frame
         for i, col in enumerate(self.columns):
-            self.table_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
+            self.table_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["min_width"])
+        
+        # Bind resize event
+        self.bind("<Configure>", self._on_resize)
+        
+    def _on_resize(self, event):
+        # Update column widths based on available space
+        available_width = event.width - 20  # Subtract padding
+        
+        # Calculate total weight
+        total_weight = sum(col["weight"] for col in self.columns)
+        
+        if total_weight > 0:
+            # Calculate width per weight unit
+            width_per_weight = max(0, available_width - sum(col["min_width"] for col in self.columns if col["weight"] == 0)) / total_weight
             
+            # Update column widths
+            for i, col in enumerate(self.columns):
+                if col["weight"] > 0:
+                    new_width = max(col["min_width"], int(col["weight"] * width_per_weight))
+                    self.table_frame.grid_columnconfigure(i, minsize=new_width)
+                    
     def _create_header(self):
         header_frame = ctk.CTkFrame(self.table_container, fg_color="#252525", corner_radius=0)
         header_frame.grid(row=0, column=0, sticky="ew")
         
         # Configure header columns with weights
         for i, col in enumerate(self.columns):
-            header_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
+            header_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["min_width"])
             
             header_cell = ctk.CTkFrame(header_frame, fg_color="#2C2C2C", corner_radius=0)
             header_cell.grid(row=0, column=i, sticky="nsew", padx=(0, 1), pady=(0, 1))
@@ -99,7 +119,7 @@ class EngineerTable(ctk.CTkFrame):
                 
                 # Configure row columns with weights
                 for i, col in enumerate(self.columns):
-                    row_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["width"])
+                    row_frame.grid_columnconfigure(i, weight=col["weight"], minsize=col["min_width"])
                 
                 # Checkbox cell
                 checkbox_cell = ctk.CTkFrame(row_frame, fg_color="transparent", corner_radius=0)
@@ -156,15 +176,12 @@ class EngineerTable(ctk.CTkFrame):
 
     def _create_actions_frame(self, parent, engineer):
         actions_frame = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=0)
-        
-        # Configure all columns with equal weight
-        for i in range(3):
-            actions_frame.grid_columnconfigure(i, weight=1)
+        actions_frame.grid_columnconfigure((0, 1, 2), weight=1, minsize=90)  # Minimum width for button columns
         
         # Button styling
         button_style = {
             "height": 28,
-            "width": 65,  # Increased button width
+            "width": 80,  # Increased button width
             "corner_radius": 4,
             "font": ("Arial", 12)
         }
@@ -178,7 +195,7 @@ class EngineerTable(ctk.CTkFrame):
             hover_color="#2573A7",
             **button_style
         )
-        view_btn.grid(row=0, column=0, padx=(5, 2), pady=6)  # Adjusted padding
+        view_btn.grid(row=0, column=0, padx=(10, 5), pady=6)
         
         # Edit button
         edit_btn = ctk.CTkButton(
@@ -189,7 +206,7 @@ class EngineerTable(ctk.CTkFrame):
             hover_color="#219A52",
             **button_style
         )
-        edit_btn.grid(row=0, column=1, padx=2, pady=6)
+        edit_btn.grid(row=0, column=1, padx=5, pady=6)
         
         # Delete button
         delete_btn = ctk.CTkButton(
@@ -200,7 +217,7 @@ class EngineerTable(ctk.CTkFrame):
             hover_color="#C0392B",
             **button_style
         )
-        delete_btn.grid(row=0, column=2, padx=(2, 5), pady=6)  # Adjusted padding
+        delete_btn.grid(row=0, column=2, padx=(5, 10), pady=6)
         
         return actions_frame
     

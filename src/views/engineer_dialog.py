@@ -773,15 +773,13 @@ class EngineerDialog(ctk.CTkToplevel):
             if not self.engineer.id:
                 self.session.add(self.engineer)
             self.session.commit()
-            # notification.success("Engineer saved successfully")
+            notification.show_success("Engineer saved successfully")
             if self.on_save:
                 self.on_save()
             self.destroy()
 
         except Exception as e:
-            # notification.error(f"Error saving engineer: {str(e)}")
-            print(f"Error saving engineer: {str(e)}")
-            print(f"Date of birth: {self.engineer.date_of_birth}")
+            notification.show_error(f"Error saving engineer: {str(e)}")
             self.session.rollback()
 
     def _upload_pdf(self):

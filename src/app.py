@@ -9,6 +9,10 @@ from CTkMessagebox import CTkMessagebox
 SIDEBAR_WIDTH = 240
 ICON_SIZE = 20
 
+# Theme icons
+MOON_ICON = "🌙"
+SUN_ICON = "☀️"
+
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -18,18 +22,39 @@ class App(ctk.CTk):
         
         # Configure window
         self.title("Engineer Management System")
-        self.geometry("1200x800")
         
-        # Configure grid
+        # Get screen dimensions
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        # Set initial window size to 90% of screen size
+        window_width = int(screen_width * 0.9)
+        window_height = int(screen_height * 0.9)
+        
+        # Calculate center position
+        center_x = int((screen_width - window_width) / 2)
+        center_y = int((screen_height - window_height) / 2)
+        
+        # Set window size and position
+        self.geometry(f"{window_width}x{window_height}+{center_x}+{center_y}")
+        
+        # Make window resizable
+        self.resizable(True, True)
+        
+        # Set minimum window size
+        self.minsize(1000, 600)
+        
+        # Configure grid with weights
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
         
         # Create SQLite database
         self.session = init_database()
         
-        # Create sidebar
+        # Create sidebar with fixed width
         self.sidebar = ctk.CTkFrame(self, width=SIDEBAR_WIDTH, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_propagate(False)  # Prevent sidebar from resizing
         self.sidebar.grid_rowconfigure(4, weight=1)
         
         # Profile section
@@ -203,10 +228,13 @@ class App(ctk.CTk):
         toolbar.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 10))
         toolbar.grid_columnconfigure(1, weight=1)  # Make search frame expand
         
+        # Initialize theme
+        self.is_dark_theme = True
+        
         # Theme toggle button
-        theme_button = ctk.CTkButton(
+        self.theme_button = ctk.CTkButton(
             toolbar,
-            text="🌓",  # Moon emoji for theme toggle
+            text=MOON_ICON,  # Start with moon icon for dark theme
             width=40,
             height=35,
             command=self.toggle_theme,
@@ -215,7 +243,7 @@ class App(ctk.CTk):
             hover_color=("gray70", "gray30"),
             corner_radius=8
         )
-        theme_button.grid(row=0, column=0, padx=(5, 10))
+        self.theme_button.grid(row=0, column=0, padx=(5, 10))
         
         # Search frame
         search_frame = ctk.CTkFrame(toolbar, fg_color="transparent")
@@ -310,10 +338,16 @@ class App(ctk.CTk):
         self.page_label.configure(text=f"Page {current_page} of {total_pages}")
 
     def toggle_theme(self):
-        if ctk.get_appearance_mode() == "Dark":
-            ctk.set_appearance_mode("Light")
-        else:
-            ctk.set_appearance_mode("Dark")
+        # Toggle between dark and light theme
+        self.is_dark_theme = not self.is_dark_theme
+        
+        # Update appearance mode
+        ctk.set_appearance_mode("dark" if self.is_dark_theme else "light")
+        
+        # Update theme button icon
+        self.theme_button.configure(
+            text=MOON_ICON if self.is_dark_theme else SUN_ICON
+        )
 
     def logout(self):
         # Show confirmation dialog

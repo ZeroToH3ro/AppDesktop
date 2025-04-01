@@ -1,16 +1,20 @@
 import customtkinter as ctk
 from PIL import Image, ImageDraw
 
-class CustomNotification(ctk.CTkFrame):
+class CustomNotification(ctk.CTkToplevel):
     def __init__(self, message, icon_type="success", parent=None, auto_close=True, duration=2000):
         super().__init__(parent)
+        
+        # Configure window settings
+        self.overrideredirect(True)  # Remove window decorations
+        self.attributes("-topmost", True)  # Keep on top
+        self.configure(fg_color=("#2d325a", "#2d325a"))
+        self.grid_columnconfigure(1, weight=1)
+        
         self._message = message
         self._icon_type = icon_type
         self._auto_close = auto_close
         self._duration = duration
-        
-        self.configure(fg_color=("#2d325a", "#2d325a"))
-        self.grid_columnconfigure(1, weight=1)
         
         # Create icon
         icon_size = 24
@@ -80,24 +84,28 @@ class NotificationService:
         self.active_notifications.clear()
     
     def _position_notification(self, notification):
-        # Get screen width from the notification's parent
-        screen_width = notification.winfo_screenwidth()
-        
-        # Position the notification
-        x = screen_width - notification.winfo_reqwidth() - 20
-        y = 40
-        
-        # Clean up any closed notifications from the list
-        self.active_notifications = [n for n in self.active_notifications if n.winfo_exists()]
-        
-        # Adjust position based on existing notifications
-        for existing in self.active_notifications:
-            if existing.winfo_exists():
-                y += existing.winfo_height() + self.notification_spacing
-        
-        # Place the notification
-        notification.place(x=x, y=y)
-        self.active_notifications.append(notification)
+        if self._main_window:
+            # Get main window dimensions
+            main_x = self._main_window.winfo_rootx()
+            main_y = self._main_window.winfo_rooty()
+            main_width = self._main_window.winfo_width()
+            
+            # Calculate notification position
+            notification.update_idletasks()
+            notif_width = notification.winfo_width()
+            
+            # Position at top right with some margin
+            x = main_x + main_width - notif_width - 20
+            y = main_y + 20
+            
+            notification.geometry(f'+{x}+{y}')
+        else:
+            # Default center position if no main window
+            notification.update_idletasks()
+            width = notification.winfo_width()
+            x = (notification.winfo_screenwidth() // 2) - (width // 2)
+            y = 20
+            notification.geometry(f'+{x}+{y}')
     
     def show_success(self, message, parent=None, duration=2000):
         if not parent:
@@ -120,5 +128,4 @@ class NotificationService:
         )
         self._position_notification(notification)
 
-# Create a singleton instance
 notification = NotificationService()
