@@ -32,7 +32,7 @@ class EngineerTable(ctk.CTkFrame):
         self.sort_direction = None # 'asc' or 'desc'
         self.column_filters = {} # {column_name: filter_text}
         self._resize_job = None # For debouncing resize events
-        # Storing dict: {'widget': container_frame/label/checkbox, 'icon_button': btn, 'label': lbl, 'var': var (for Select)}
+        # Storing dict: {'container': frame, 'icon_button': btn, 'label': lbl, 'var': var (for Select)}
         self.header_widgets = {}
         self._current_menu = None # Track currently open menu
 
@@ -102,22 +102,21 @@ class EngineerTable(ctk.CTkFrame):
             self.table_frame.grid_columnconfigure(current_grid_col, minsize=new_width, weight=col['weight'])
             current_grid_col += 1
 
-    # --- Header Creation (Padding Adjusted for Alignment) ---
+    # --- Header Creation (Icon on Right) ---
     def _redraw_headers(self):
-        """Clears and redraws headers, adjusting padding for alignment."""
+        """Clears and redraws headers with icon button on the right."""
         for widget in self.header_frame.winfo_children(): widget.destroy()
         self.header_widgets.clear()
 
         vertical_padding = 3
-        base_left_padding = 20 # Base indent for all header/cell content starts
-        icon_right_padding = 5 # Space between icon and label text
+        base_left_padding = 20
+        icon_left_padding = 5 # Space between label and icon
+        base_right_padding = 5 # Padding after icon
 
         header_label_style = {"text_color": "#E0E0E0", "font": ("Arial Bold", 13), "anchor": "w"}
         icon_button_style = {"fg_color": "transparent", "hover_color": "#454545", "text_color": "#B0B0B0",
                              "font": ("Arial Bold", 16), "width": 20, "height": 22,
                              "corner_radius": 4, "border_width": 0}
-        # Calculate the space taken by the icon button + its right padding
-        icon_offset = icon_button_style["width"] + icon_right_padding
 
         current_grid_col = 0
         for col_info in self.columns:
@@ -127,50 +126,51 @@ class EngineerTable(ctk.CTkFrame):
                 self.table_frame.grid_columnconfigure(current_grid_col, weight=0, minsize=0)
                 continue
 
-            # --- Select All Checkbox Column ---
+            # --- Create Container Frame for EVERY header cell ---
+            header_cell_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+            header_cell_frame.grid(row=0, column=current_grid_col, sticky="nsew", padx=(0, 1), pady=0)
+            # Configure internal grid columns: 0 for label (expand), 1 for icon/spacer (fixed)
+            header_cell_frame.grid_columnconfigure(0, weight=1) # Label area expands
+            header_cell_frame.grid_columnconfigure(1, weight=0) # Icon/Spacer area fixed
+
+            # --- Populate the container frame based on column type ---
+            icon_button = None
+            header_label = None
+
             if col_name == "Select" and col_info.get("select_all"):
-                checkbox_header_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-                # Apply base left padding
-                checkbox_header_frame.grid(row=0, column=current_grid_col, sticky="nsew", padx=(base_left_padding, 0), pady=vertical_padding)
-                checkbox_header_frame.grid_columnconfigure(0, weight=0)
                 select_all_var = tk.BooleanVar()
-                select_all_cb = ctk.CTkCheckBox(checkbox_header_frame, text="", variable=select_all_var,
-                                                command=lambda: self.toggle_all_rows(select_all_var.get()),
-                                                width=20, height=20, fg_color="#1f538d", hover_color="#3b8ed0",
-                                                border_color="#4F4F4F", corner_radius=3)
-                select_all_cb.grid(row=0, column=0, sticky="w") # No extra padding inside
-                self.header_widgets[col_name] = {"widget": select_all_cb, "var": select_all_var}
+                select_all_cb = ctk.CTkCheckBox(
+                    header_cell_frame, text="", variable=select_all_var,
+                    command=lambda: self.toggle_all_rows(select_all_var.get()),
+                    width=20, height=20, fg_color="#1f538d", hover_color="#3b8ed0",
+                    border_color="#4F4F4F", corner_radius=3
+                )
+                # Place checkbox in column 0 with base padding
+                select_all_cb.grid(row=0, column=0, sticky="w", padx=(base_left_padding, 0), pady=vertical_padding)
+                self.header_widgets[col_name] = {"widget": select_all_cb, "var": select_all_var, 'container': header_cell_frame}
 
-            # --- Actions Column Header (Simplified) ---
             elif col_name == "Actions":
-                 header_label = ctk.CTkLabel(self.header_frame, text=col_name, **header_label_style)
-                 # Apply base left padding
-                 header_label.grid(row=0, column=current_grid_col, sticky="w", padx=(base_left_padding, 5), pady=vertical_padding)
-                 self.header_widgets[col_name] = {'widget': header_label, 'label': header_label}
+                 header_label = ctk.CTkLabel(header_cell_frame, text=col_name, **header_label_style)
+                 # Place label in column 0, apply base padding
+                 header_label.grid(row=0, column=0, sticky="w", padx=(base_left_padding, 5), pady=vertical_padding)
+                 self.header_widgets[col_name] = {'widget': header_label, 'label': header_label, 'container': header_cell_frame}
 
-            # --- Other Header Columns (Icon Button + Label) ---
-            else:
-                header_cell_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-                # Grid frame with minimal padding between cells
-                header_cell_frame.grid(row=0, column=current_grid_col, sticky="nsew", padx=(0, 1), pady=0)
-                header_cell_frame.grid_columnconfigure(0, weight=0); header_cell_frame.grid_columnconfigure(1, weight=1)
-
+            else: # Standard column with label + potential icon
                 is_interactive = col_info.get('sortable', False) or col_info.get('filterable', False) or col_info.get('hideable', True)
-                icon_button = None
+
+                # Create text label (always present)
+                header_label = ctk.CTkLabel(header_cell_frame, text=col_name, **header_label_style)
+                # Label placed in column 0, gets base left padding
+                header_label.grid(row=0, column=0, sticky="w", padx=(base_left_padding, 5), pady=vertical_padding)
+
                 if is_interactive:
                     icon_button = ctk.CTkButton(header_cell_frame, text="⋮", command=lambda c=col_name: self._show_header_menu(c), **icon_button_style)
-                    # Icon gets the base left padding
-                    icon_button.grid(row=0, column=0, sticky="w", padx=(base_left_padding, icon_right_padding), pady=vertical_padding)
-                else:
-                    # Spacer gets base padding + icon offset to align subsequent label
-                    spacer = ctk.CTkFrame(header_cell_frame, fg_color="transparent", width=icon_offset + base_left_padding, height=icon_button_style["height"])
-                    spacer.grid(row=0, column=0, sticky="w", padx=(0,0), pady=vertical_padding)
+                    # Icon placed in column 1, gets padding relative to label and right edge
+                    icon_button.grid(row=0, column=1, sticky="e", padx=(icon_left_padding, base_right_padding), pady=vertical_padding)
+                # else: No spacer needed on the right
 
-                header_label = ctk.CTkLabel(header_cell_frame, text=col_name, **header_label_style)
-                # Label gets NO extra left padding, aligns right after icon/spacer
-                header_label.grid(row=0, column=1, sticky="ew", padx=(0, 5), pady=vertical_padding)
-
-                self.header_widgets[col_name] = {'widget': header_cell_frame, 'icon_button': icon_button, 'label': header_label}
+                # Store references
+                self.header_widgets[col_name] = {'widget': header_cell_frame, 'icon_button': icon_button, 'label': header_label, 'container': header_cell_frame}
 
             # Configure main grid column properties
             self.header_frame.grid_columnconfigure(current_grid_col, weight=col_info['weight'], minsize=col_info['min_width'])
@@ -250,17 +250,14 @@ class EngineerTable(ctk.CTkFrame):
         for widget in self.table_frame.winfo_children(): widget.destroy()
         self._redraw_headers();
 
-    # --- Data Loading (Cell Padding Adjusted for Alignment) ---
+    # --- Data Loading (Simplified Cell Structure for Alignment) ---
     def load_data(self):
         try:
             for widget in self.table_frame.winfo_children(): widget.destroy()
             self.all_engineer_ids_on_current_page = []
 
-            # Define base padding and icon offset (should match header)
             base_left_padding = 20
-            icon_right_padding = 5
-            icon_width = 20 # From icon_button_style
-            header_icon_offset = icon_width + icon_right_padding
+            vertical_padding = 3
 
             # --- Build Query (Unchanged logic) ---
             base_query = self.session.query(Engineer); query = base_query
@@ -292,7 +289,7 @@ class EngineerTable(ctk.CTkFrame):
             engineers = query.offset(offset).limit(self.rows_per_page).all()
             self.all_engineer_ids_on_current_page = [eng.id for eng in engineers if eng.id is not None]
 
-            # --- Insert Data Rows (Padding Adjusted) ---
+            # --- Insert Data Rows (Simplified Cell Structure) ---
             current_grid_col_map = {name: i for i, name in enumerate(col['name'] for col in self.columns if self.column_visibility[col['name']])}
             for row_idx, engineer in enumerate(engineers):
                 row_color = "#282828" if row_idx % 2 == 0 else "#242424"
@@ -307,36 +304,28 @@ class EngineerTable(ctk.CTkFrame):
                      if not self.column_visibility[col_name]: continue
                      grid_col = current_grid_col_map[col_name]
 
-                     # --- Create Cells with Adjusted Padding ---
+                     # --- Place content directly in row_frame ---
                      if col_name == "Select":
-                         checkbox_cell = ctk.CTkFrame(row_frame, fg_color="transparent")
-                         # Apply base left padding
-                         checkbox_cell.grid(row=0, column=grid_col, sticky="nsew", padx=(base_left_padding, 0), pady=3)
-                         checkbox_cell.grid_columnconfigure(0, weight=0)
                          checkbox_var = tk.BooleanVar(value=(engineer.id in self.selected_rows))
-                         checkbox = ctk.CTkCheckBox(checkbox_cell, text="", variable=checkbox_var,
+                         checkbox = ctk.CTkCheckBox(row_frame, text="", variable=checkbox_var, # Parent is row_frame
                                                     command=lambda id=engineer.id, var=checkbox_var: self.toggle_row_selection(id, var),
                                                     width=20, height=20, fg_color="#1f538d", hover_color="#3b8ed0",
                                                     border_color="#4F4F4F", corner_radius=3)
-                         checkbox.grid(row=0, column=0, sticky="w")
+                         # Apply base padding directly
+                         checkbox.grid(row=0, column=grid_col, sticky="w", padx=(base_left_padding, 0), pady=vertical_padding)
 
                      elif col_name == "Actions":
-                         actions_frame = self._create_actions_frame(row_frame, engineer)
-                         actions_frame.grid(row=0, column=grid_col, sticky="nsew") # Internal padding handles alignment
+                         actions_frame = self._create_actions_frame(row_frame, engineer) # Parent is row_frame
+                         # Grid actions frame directly
+                         actions_frame.grid(row=0, column=grid_col, sticky="nsew", padx=0, pady=0) # Let internal padding handle alignment
 
                      elif col_info.get("db_field"):
                          attr_val = getattr(engineer, col_info["db_field"], "-")
                          text = str(attr_val) if attr_val is not None else "-"
-                         cell = ctk.CTkFrame(row_frame, fg_color="transparent")
-                         cell.grid(row=0, column=grid_col, sticky="nsew")
-                         cell.grid_columnconfigure(0, weight=1)
-                         label = ctk.CTkLabel(cell, text=text, anchor="w", justify="left",
+                         label = ctk.CTkLabel(row_frame, text=text, anchor="w", justify="left", # Parent is row_frame
                                               font=("Arial", 12), text_color="#D0D0D0")
-                         # Apply base padding PLUS icon offset to align text with header text
-                         label_left_padding = base_left_padding + header_icon_offset
-                         # Exception: ID column might not have icon, align directly with base padding? Check header structure.
-                         # Assuming ID header also has icon/spacer for consistency here.
-                         label.grid(row=0, column=0, sticky="nsew", padx=(label_left_padding, 5), pady=3)
+                         # Apply base padding directly
+                         label.grid(row=0, column=grid_col, sticky="w", padx=(base_left_padding, 5), pady=vertical_padding)
 
             # --- Final UI Updates ---
             if self.on_page_change: self.on_page_change(self.current_page, self.total_pages)
