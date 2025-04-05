@@ -1,33 +1,45 @@
 # Required imports for the enhanced functionality
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk, messagebox, Menu
-import customtkinter as ctk
+from tkinter import Menu, messagebox, ttk # Import ttk for themed scrollbar
+import sqlalchemy
+from sqlalchemy import func, asc, desc # For filtering, sorting
 import math
-import traceback
-from sqlalchemy import asc, desc
-
-from src.models.engineer import Engineer
-
-# Simple notification function
-def show_notification(parent, message, title="Notification", type="info"):
-    """Show a notification message to the user"""
-    if type == "info":
-        messagebox.showinfo(title, message, parent=parent)
-    elif type == "warning":
-        messagebox.showwarning(title, message, parent=parent)
-    elif type == "error":
-        messagebox.showerror(title, message, parent=parent)
-    else:
-        messagebox.showinfo(title, message, parent=parent)
+import traceback # For detailed error logging
 
 # Imports from your original code structure
 # Ensure these paths are correct for your project
-# Using our local show_notification function instead of external notification service
+from src.services.notification import notification
 # Assuming EngineerDialog handles both view and edit
 from src.views.engineer_dialog import EngineerDialog
 # from src.views.engineer_detail import EngineerDetailDialog # Potentially removed if merged into EngineerDialog
 from src.models.engineer import Engineer # Assuming this is your SQLAlchemy model
+
+# Simple notification function (using messagebox as fallback)
+def show_notification(parent, message, title="Notification", type="info"):
+    """Show a notification message to the user"""
+    try:
+        # Try using the imported notification service if available
+        if type == "info":
+            notification.show_info(title, message) # Adjust method name if needed
+        elif type == "warning":
+            notification.show_warning(title, message) # Adjust method name if needed
+        elif type == "error":
+            notification.show_error(title, message) # Adjust method name if needed
+        else:
+            notification.show_info(title, message)
+    except Exception:
+        # Fallback to messagebox if notification service fails or is not fully implemented
+        print(f"Notification service fallback: {title} - {message}")
+        if type == "info":
+            messagebox.showinfo(title, message, parent=parent)
+        elif type == "warning":
+            messagebox.showwarning(title, message, parent=parent)
+        elif type == "error":
+            messagebox.showerror(title, message, parent=parent)
+        else:
+            messagebox.showinfo(title, message, parent=parent)
+
 
 class EngineerTable(ctk.CTkFrame):
     def __init__(self, parent, session, on_page_change=None):
@@ -49,105 +61,107 @@ class EngineerTable(ctk.CTkFrame):
         # Storing dict: {'widget': CTkButton/CTkCheckBox, 'var': var (for Select)}
         self.header_widgets = {}
         self._current_menu = None # Track currently open menu
+
+        # --- Column Definitions (UPDATED: Renamed, New Columns Added) ---
+        # !!! USER ACTION REQUIRED: Verify 'db_field' names match your Engineer model !!!
         self.columns = [
-            {"name": "Select", "width": 50, "min_width": 50, "weight": 0, "select_all": True, "hideable": False},
-            {"name": "ID", "width": 50, "min_width": 50, "weight": 0, "db_field": "id", "sortable": True, "filterable": True},
-            {"name": "Name", "width": 130, "min_width": 100, "weight": 3, "db_field": "name", "sortable": True, "filterable": True},
-            {"name": "Company", "width": 120, "min_width": 100, "weight": 2, "db_field": "company_name", "sortable": True, "filterable": True},
-            {"name": "DoB", "width": 90, "min_width": 90, "weight": 0, "db_field": "date_of_birth", "sortable": True, "filterable": False},
-            {"name": "Technical Field", "width": 120, "min_width": 100, "weight": 2, "db_field": "field_name", "sortable": True, "filterable": True},
-            {"name": "Expertise", "width": 120, "min_width": 100, "weight": 2, "db_field": "evaluation_target", "sortable": True, "filterable": True},
-            {"name": "Experience", "width": 80, "min_width": 80, "weight": 0, "db_field": "experience", "sortable": True, "filterable": True},
-            {"name": "Actions", "width": 180, "min_width": 180, "weight": 0, "hideable": False}
+            {"name": "Select",          "width": 50, "weight": 0, "min_width": 50,  "sortable": False, "filterable": False, "hideable": False, "select_all": True},
+            {"name": "ID",              "width": 50, "weight": 0, "min_width": 50,  "db_field": "id",                  "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Name",            "width": 130,"weight": 3, "min_width": 100, "db_field": "name",                "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Company",         "width": 120,"weight": 2, "min_width": 100, "db_field": "company_name",        "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "DoB",             "width": 90, "weight": 0, "min_width": 90,  "db_field": "date_of_birth",       "sortable": True,  "filterable": False, "hideable": True},
+            {"name": "Technical Field", "width": 120,"weight": 2, "min_width": 100, "db_field": "field_name",          "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Expertise",       "width": 120,"weight": 2, "min_width": 100, "db_field": "evaluation_target",   "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Is PM",           "width": 60, "weight": 0, "min_width": 60,  "db_field": "is_project_manager",  "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Experience",      "width": 80, "weight": 0, "min_width": 80,  "db_field": "years_experience",    "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Rating",          "width": 70, "weight": 0, "min_width": 70,  "db_field": "rating",              "sortable": True,  "filterable": True,  "hideable": True},
+            {"name": "Actions",         "width": 180,"weight": 0, "min_width": 180, "sortable": False, "filterable": False, "hideable": False}
         ]
-        
-        # --- Column Visibility ---
-        self.column_visibility = {col["name"]: True for col in self.columns}
-        
-        # --- Layout Constants ---
-        self.base_left_padding = 10
-        self.vertical_padding = 5
-        self.min_total_width = 800
-        
-        # --- Configure Main Frame ---
-        self.configure(fg_color="transparent")
+        # Initialize visibility state
+        self.column_visibility = {col['name']: True for col in self.columns}
+
+        # --- Constants for Padding ---
+        self.vertical_padding = 3
+        self.base_left_padding = 20
+
+        # --- Layout Setup ---
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)  # Data section expands
-        
-        # --- Configure Main Frame ---
-        self.configure(fg_color="transparent")
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)  # Data section expands
-        
-        # --- Create Header Frame ---
-        self.header_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.header_container.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-        self.header_container.grid_columnconfigure(0, weight=1)
-        
-        # --- Create Data Container ---
-        self.data_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.data_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        self.data_container.grid_columnconfigure(0, weight=1)
-        self.data_container.grid_rowconfigure(0, weight=1)
-        
-        # --- Create Horizontal Scrollbar (shared between header and data) ---
-        self.h_scrollbar = ttk.Scrollbar(self, orient="horizontal")
-        self.h_scrollbar.grid(row=2, column=0, sticky="ew", padx=10)
-        
-        # --- Create Header Canvas ---
-        self.header_canvas = tk.Canvas(self.header_container, bg="#252525", highlightthickness=0, height=40)
-        self.header_canvas.grid(row=0, column=0, sticky="ew")
-        self.header_canvas.configure(xscrollcommand=self.h_scrollbar.set)
-        
-        # --- Create Header Frame inside Canvas ---
-        self.header_frame = ctk.CTkFrame(self.header_canvas, fg_color="#252525", corner_radius=8)
-        self.header_window = self.header_canvas.create_window(0, 0, window=self.header_frame, anchor="nw")
-        
-        # --- Create Data Canvas with Vertical Scrollbar ---
-        self.data_canvas = tk.Canvas(self.data_container, bg="#1E1E1E", highlightthickness=0)
-        self.data_canvas.grid(row=0, column=0, sticky="nsew")
-        
-        # --- Create Vertical Scrollbar ---
-        self.v_scrollbar = ttk.Scrollbar(self.data_container, orient="vertical", command=self.data_canvas.yview)
+        self.grid_rowconfigure(1, weight=1) # Allow table_container to expand vertically
+
+        # --- Header Frame ---
+        self.header_frame = ctk.CTkFrame(self, fg_color="#252525", corner_radius=8)
+        self.header_frame.grid(row=0, column=0, sticky="new", padx=10, pady=(10, 0))
+        self.header_frame.grid_rowconfigure(0, weight=0)
+
+
+        # --- Table Container (Holds Canvas and Scrollbars) ---
+        self.table_container = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=8)
+        self.table_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.table_container.grid_columnconfigure(0, weight=1) # Canvas expands horizontally
+        self.table_container.grid_columnconfigure(1, weight=0) # V scrollbar fixed width
+        self.table_container.grid_rowconfigure(0, weight=1)    # Canvas expands vertically
+        self.table_container.grid_rowconfigure(1, weight=0)    # H scrollbar fixed height
+
+        # --- Canvas for Data Area ---
+        # Using tk.Canvas for potentially more reliable scroll region behavior
+        self.canvas = tk.Canvas(self.table_container, bg="#1E1E1E", borderwidth=0, highlightthickness=0)
+
+        # --- Scrollbars (using CTkScrollbar for better theme matching) ---
+        self.h_scrollbar = ctk.CTkScrollbar(self.table_container, orientation="horizontal", command=self.canvas.xview)
+        self.v_scrollbar = ctk.CTkScrollbar(self.table_container, orientation="vertical", command=self.canvas.yview)
+
+        # Configure Canvas to use Scrollbars
+        self.canvas.configure(xscrollcommand=self.h_scrollbar.set, yscrollcommand=self.v_scrollbar.set)
+
+        # Grid Canvas and Scrollbars
+        self.canvas.grid(row=0, column=0, sticky="nsew")
         self.v_scrollbar.grid(row=0, column=1, sticky="ns")
-        self.data_canvas.configure(yscrollcommand=self.v_scrollbar.set)
-        
-        # Configure the canvases to update the scrollbar
-        self.header_canvas.configure(xscrollcommand=self.h_scrollbar.set)
-        self.data_canvas.configure(xscrollcommand=self.h_scrollbar.set)
-        
-        # --- Configure Horizontal Scrollbar to Control Both Canvases ---
-        self.h_scrollbar.config(command=self._on_h_scroll)
-        
-        # --- Create Data Frame inside Canvas ---
-        self.content_frame = ctk.CTkFrame(self.data_canvas, fg_color="transparent")
-        self.content_window = self.data_canvas.create_window(0, 0, window=self.content_frame, anchor="nw")
-        
-        # --- Configure Scrollbar Styles ---
-        style = ttk.Style()
-        style.configure("Horizontal.TScrollbar", background="#4a4a4a", troughcolor="#333333")
-        style.configure("Vertical.TScrollbar", background="#4a4a4a", troughcolor="#333333")
-        
+        self.h_scrollbar.grid(row=1, column=0, sticky="ew")
+
+        # --- Content Frame (Inside Canvas) ---
+        self.content_frame = ctk.CTkFrame(self.canvas, fg_color="#1E1E1E") # Match canvas bg
+        # Place content_frame onto the canvas using create_window
+        self.canvas_frame_id = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw", tags="content_frame")
+
         # --- Bind Events for Scroll Region Updates ---
-        self.header_frame.bind("<Configure>", lambda e: self._update_scroll_region(self.header_canvas))
-        self.content_frame.bind("<Configure>", lambda e: self._update_scroll_region(self.data_canvas))
-        self.bind("<Configure>", self._on_window_resize)
+        # Update scrollregion when content_frame size changes
+        self.content_frame.bind("<Configure>", self._on_content_frame_configure)
+        # Update the width of the frame inside canvas when canvas resizes
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+
 
         # --- Initial Draw ---
         self._redraw_headers()
-        # Load data after a short delay to ensure UI is ready
+        self.bind("<Configure>", self._on_resize) # Bind main frame resize
         self.after(100, self.load_data)
-        
-        # Update scrollable frame when window is resized
-        self.bind('<Configure>', self._update_scrollable_width)
 
-    # --- Resize Handling (Target content_frame + Force Update) ---
+    # --- Event Handlers for Manual Scrolling ---
+    def _on_content_frame_configure(self, event=None):
+        """Called when the size of the content_frame changes."""
+        # Update the canvas scroll region to match the content frame's bounding box
+        self.canvas.update_idletasks() # Ensure frame size is calculated
+        bbox = self.canvas.bbox("all")
+        if bbox: # Ensure bbox is valid
+            self.canvas.configure(scrollregion=bbox)
+            # print(f"Scrollregion updated: {bbox}") # Debug print
+        # else:
+            # print("Scrollregion update skipped: bbox is None")
+
+    def _on_canvas_configure(self, event=None):
+        """Called when the canvas size changes, adjust the frame width if needed."""
+        # Make the frame inside the canvas match the canvas width
+        # This primarily helps with vertical scrolling appearance
+        canvas_width = self.canvas.winfo_width()
+        self.canvas.itemconfig(self.canvas_frame_id, width=canvas_width)
+
+
+    # --- Resize Handling (Target content_frame) ---
     def _on_resize(self, event=None):
         if self._resize_job: self.after_cancel(self._resize_job)
         self._resize_job = self.after(50, self._perform_resize, event)
 
     def _perform_resize(self, event=None):
-        """Calculates and applies column widths and updates scroll region."""
+        """Calculates and applies column widths to header and content frames."""
         if event: parent_width = event.width
         else:
             if not self.winfo_exists(): return
@@ -166,238 +180,250 @@ class EngineerTable(ctk.CTkFrame):
             if not self.column_visibility[col['name']]: continue
             new_width = max(col["min_width"], int(col["weight"] * width_per_weight)) if col["weight"] > 0 else col["min_width"]
             # Configure columns in header frame
-            self.header_frame.grid_columnconfigure(current_grid_col, minsize=new_width, weight=0)  # Set weight to 0 for fixed width
+            self.header_frame.grid_columnconfigure(current_grid_col, minsize=new_width, weight=col['weight'])
             # Configure columns ONLY in the intermediate content_frame
-            self.content_frame.grid_columnconfigure(current_grid_col, minsize=new_width, weight=0)  # Set weight to 0 for fixed width
+            self.content_frame.grid_columnconfigure(current_grid_col, minsize=new_width, weight=col['weight'])
             current_grid_col += 1
 
-        # --- Force Scrollable Frame Update ---
-        self.data_canvas.update_idletasks() # Allow tkinter to process geometry changes
-        self.header_frame.update_idletasks()
-        self._update_scrollable_width() # Update the scroll regions
+        # --- Explicitly update scroll region after resize ---
+        self.after(10, self._on_content_frame_configure)
 
 
-    # --- Header Creation ---
+    # --- Header Creation (Simplified Structure - Unchanged) ---
     def _redraw_headers(self):
         """Clears and redraws headers with a simple structure and consistent styling."""
         for widget in self.header_frame.winfo_children(): widget.destroy()
         self.header_widgets.clear()
-        
-        # Create header cells for each visible column
-        current_grid_col = 0
-        
-        for col_idx, col_def in enumerate(self.columns):
-            if not self.column_visibility[col_def['name']]:
-                continue
-                
-            # Calculate exact width for the column
-            col_width = max(col_def.get('min_width', 50), col_def['width'])
-            
-            # Create a fixed-width frame for this column
-            col_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent", width=col_width, height=40)
-            col_frame.grid(row=0, column=current_grid_col, sticky="nsew", padx=0, pady=0)
-            col_frame.grid_propagate(False)  # Force the frame to maintain its size
-            
-            # Create the header content based on column type
-            if col_def.get('select_all', False):
-                # Create checkbox for Select All
-                var = tk.BooleanVar(value=False)
-                checkbox = ctk.CTkCheckBox(
-                    col_frame, text="", variable=var, 
-                    width=20, height=20, corner_radius=3,
-                    fg_color="#1f538d", hover_color="#2e6fbd",
-                    border_color="#666666", border_width=1,
-                    command=self._on_select_all_clicked
-                )
-                checkbox.place(relx=0.5, rely=0.5, anchor="center")
-                self.header_widgets[col_def['name']] = {'widget': checkbox, 'var': var}
-            else:
-                # Create button for sortable columns
-                button = ctk.CTkButton(
-                    col_frame, text=col_def['name'],
-                    fg_color="transparent", text_color="white",
-                    hover_color="#333333", anchor="w",
-                    height=28, width=col_width-10, corner_radius=0,
-                    font=("Arial Bold", 13)
-                )
-                button.place(relx=0.5, rely=0.5, anchor="center")
-                
-                # Add right-click menu for column operations
-                button.bind("<Button-3>", lambda e, col=col_def: self._show_column_menu(e, col))
-                
-                # Add sorting capability if column is sortable
-                if col_def.get('sortable', False):
-                    button.configure(command=lambda col=col_def: self._toggle_sort(col['name']))
-                
-                # Add filter indicator if column is filterable
-                if col_def.get('filterable', False):
-                    # Store button for later reference
-                    self.header_widgets[col_def['name']] = {'widget': button}
-            
-            current_grid_col += 1
-            
-        # Update header indicators (sort, filter)
-        self._update_header_indicators()
-        
-    def _update_header_indicators(self):
-        """Update header indicators for sorting and filtering"""
-        # Update sort indicators
-        if self.sort_column and self.sort_column in self.header_widgets:
-            widget_info = self.header_widgets[self.sort_column]
-            if 'widget' in widget_info:
-                button = widget_info['widget']
-                # Add sort direction indicator to button text
-                direction_symbol = "↑" if self.sort_direction == "asc" else "↓"
-                col_name = self.sort_column
-                button.configure(text=f"{col_name} {direction_symbol}")
-        
-        # Update filter indicators
-        for col_name, filter_value in self.column_filters.items():
-            if col_name in self.header_widgets and 'widget' in self.header_widgets[col_name]:
-                button = self.header_widgets[col_name]['widget']
-                # Add filter indicator to button text
-                if filter_value:
-                    button.configure(text=f"{col_name} 🔍")
 
+        header_button_style = {"fg_color": "transparent", "hover_color": "#353535", "text_color": "#E0E0E0",
+                               "font": ("Arial Bold", 12), "anchor": "w", "height": 25,
+                               "corner_radius": 0, "border_width": 0}
+
+        current_grid_col = 0
+        for col_info in self.columns:
+            col_name = col_info['name']
+            if not self.column_visibility[col_name]:
+                self.header_frame.grid_columnconfigure(current_grid_col, weight=0, minsize=0)
+                self.content_frame.grid_columnconfigure(current_grid_col, weight=0, minsize=0)
+                continue
+
+            if col_name == "Select": # Removed select_all check
+                select_all_var = tk.BooleanVar()
+                select_all_cb = ctk.CTkCheckBox(
+                    self.header_frame, text="", variable=select_all_var,
+                    command=lambda: self.toggle_all_rows(select_all_var.get()),
+                    width=20, height=20, fg_color="#1f538d", hover_color="#3b8ed0",
+                    border_color="#4F4F4F", corner_radius=3
+                )
+                select_all_cb.grid(row=0, column=current_grid_col, sticky="w", padx=(self.base_left_padding, 0), pady=self.vertical_padding)
+                self.header_widgets[col_name] = {"widget": select_all_cb, "var": select_all_var}
+            else:
+                header_button = ctk.CTkButton(
+                    self.header_frame, text=col_name, **header_button_style
+                )
+                header_button.grid(row=0, column=current_grid_col, sticky="w", padx=(self.base_left_padding, 5), pady=self.vertical_padding)
+                self.header_widgets[col_name] = {'widget': header_button}
+
+                is_interactive = col_info.get('sortable', False) or col_info.get('filterable', False) or col_info.get('hideable', True)
+                if is_interactive and col_name != "Actions":
+                    header_button.configure(command=lambda c=col_name: self._show_header_menu(c))
+                else:
+                    header_button.configure(hover=False, command=None)
+
+            # Configure column properties
+            self.header_frame.grid_columnconfigure(current_grid_col, weight=col_info['weight'], minsize=col_info['min_width'])
+            self.content_frame.grid_columnconfigure(current_grid_col, weight=col_info['weight'], minsize=col_info['min_width'])
+            current_grid_col += 1
+
+        self.after(50, self._perform_resize)
+        self.after(55, self._update_header_indicators)
+
+    # --- Header Menu Logic (Unchanged) ---
+    def _show_header_menu(self, column_name):
+        if self._current_menu and self._current_menu.winfo_exists(): self._current_menu.destroy()
+        col_info = next((c for c in self.columns if c['name'] == column_name), None)
+        if not col_info or column_name not in self.header_widgets: return
+        button = self.header_widgets[column_name].get('widget')
+        if not isinstance(button, ctk.CTkButton): return
+        menu = Menu(button, tearoff=0, background="#333333", foreground="#FFFFFF", activebackground="#444444", activeforeground="#FFFFFF", relief="flat", borderwidth=0)
+        if col_info.get('sortable'):
+            menu.add_command(label="Sort Ascending", command=lambda: self._set_sort(column_name, 'asc'))
+            menu.add_command(label="Sort Descending", command=lambda: self._set_sort(column_name, 'desc'))
+            if self.sort_column == column_name: menu.add_separator(); menu.add_command(label="Clear Sort", command=lambda: self._set_sort(None, None))
+            menu.add_separator()
+        if col_info.get('filterable'):
+            filter_text = self.column_filters.get(column_name, ""); filter_label = f"Filter..." if not filter_text else f"Filter: '{filter_text}'"
+            menu.add_command(label=filter_label, command=lambda: self._prompt_filter(column_name))
+            if filter_text: menu.add_command(label="Clear Filter", command=lambda: self._clear_column_filter(column_name))
+            menu.add_separator()
+        if col_info.get('hideable', True): menu.add_command(label="Hide Column", command=lambda: self._toggle_column_visibility(column_name, False)); menu.add_separator()
+        menu.add_command(label="Show Columns...", command=self._show_column_chooser)
+        menu.post(button.winfo_rootx() + 5, button.winfo_rooty() + button.winfo_height()); self._current_menu = menu
+
+    # --- Sorting Logic (Unchanged) ---
+    def _set_sort(self, column_name, direction):
+        self.sort_column = column_name; self.sort_direction = direction; self.current_page = 1; self.load_data()
+
+    # --- Header Indicator Update (Unchanged) ---
+    def _update_header_indicators(self):
+        for name, data in self.header_widgets.items():
+            widget = data.get('widget')
+            if isinstance(widget, ctk.CTkButton) and widget.winfo_exists():
+                col_info = next((c for c in self.columns if c['name'] == name), None)
+                if not col_info: continue
+                base_text = name; sort_indicator = ""; menu_indicator = ""
+                if name == self.sort_column: sort_indicator = " ⯅" if self.sort_direction == 'asc' else " ⯆"
+                is_interactive = col_info.get('sortable', False) or col_info.get('filterable', False) or col_info.get('hideable', True)
+                if is_interactive and name != "Actions": menu_indicator = " ⋮"
+                widget.configure(text=base_text + sort_indicator + menu_indicator)
+
+    # --- Filtering Logic (Unchanged) ---
+    def _prompt_filter(self, column_name):
+        dialog = ctk.CTkInputDialog(text=f"Filter {column_name}:", title=f"Filter {column_name}")
+        val = dialog.get_input();
+        if val is not None: self.apply_specific_filter(column_name, val.strip())
+    def _clear_column_filter(self, column_name):
+        self.apply_specific_filter(column_name, "")
+    def apply_specific_filter(self, field_name, filter_value):
+        col_info = next((c for c in self.columns if c["name"] == field_name), None)
+        if not col_info and field_name is not None: print(f"Warning: Invalid filter field '{field_name}'"); return
+        self.column_filters.clear()
+        if field_name and filter_value: self.column_filters[field_name] = filter_value
+        print(f"Applying filter: {self.column_filters}")
+        self.current_page = 1; self.load_data()
+
+    # --- Column Visibility Logic (Unchanged) ---
+    def _toggle_column_visibility(self, column_name, visible):
+        visible_count = sum(1 for v in self.column_visibility.values() if v)
+        if not visible and visible_count <= 1: messagebox.showwarning("Cannot Hide", "Cannot hide the last column."); return
+        self.column_visibility[column_name] = visible; self._redraw_table_layout()
+    def _show_column_chooser(self):
+        dialog = ctk.CTkToplevel(self); dialog.title("Show/Hide Columns"); dialog.transient(self); dialog.grab_set()
+        vars = {}; frame = ctk.CTkFrame(dialog); frame.pack(padx=20, pady=10, fill="both", expand=True); row = 0
+        for col in self.columns:
+            name = col['name'];
+            if col.get('hideable', True): var = tk.BooleanVar(value=self.column_visibility[name]); cb = ctk.CTkCheckBox(frame, text=name, variable=var); cb.grid(row=row, column=0, sticky="w", padx=10, pady=2); vars[name] = var; row += 1
+        def apply():
+            changed = False; new_vis = dict(self.column_visibility)
+            for n, v in vars.items():
+                if new_vis[n] != v.get(): new_vis[n] = v.get(); changed = True
+            allowed = [c['name'] for c in self.columns if c.get('hideable', True)]
+            if changed and not any(new_vis[n] for n in allowed): messagebox.showwarning("Error", "Keep at least one column visible.", parent=dialog); return
+            if changed: self.column_visibility = new_vis; self._redraw_table_layout()
+            dialog.destroy()
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent"); btn_frame.pack(pady=10)
+        ctk.CTkButton(btn_frame, text="Apply", command=apply).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Cancel", command=dialog.destroy, fg_color="gray").pack(side="left", padx=5)
+
+    def _redraw_table_layout(self):
+        # Clear rows from content_frame
+        for widget in self.content_frame.winfo_children(): widget.destroy()
+        self._redraw_headers();
+        self.after(10, self.load_data)
 
     # --- Data Loading (Uses content_frame, Update Scrollregion) ---
     def load_data(self):
         try:
-            # --- Clear existing content ---
+            # Clear previous rows from the content_frame
             for widget in self.content_frame.winfo_children():
                 widget.destroy()
-            
-            # --- Query Database with Filtering and Sorting ---
-            query = self.session.query(Engineer)
-            
-            # Apply filters if any
-            if self.column_filters:
-                for col_name, filter_text in self.column_filters.items():
-                    col_info = next((c for c in self.columns if c['name'] == col_name), None)
-                    if col_info and 'db_field' in col_info and filter_text:
-                        db_field = col_info['db_field']
-                        query = query.filter(getattr(Engineer, db_field).ilike(f'%{filter_text}%'))
-            
-            # Apply sorting if specified
-            if self.sort_column and self.sort_direction:
+            self.all_engineer_ids_on_current_page = []
+
+            data_font = ("Arial", 12)
+
+            # --- Build Query (Includes Filters and Sorting) ---
+            base_query = self.session.query(Engineer); query = base_query
+            # Apply Specific Column Filters
+            filter_clauses = []
+            for col_name, filter_value in self.column_filters.items():
+                 if not filter_value: continue
+                 column_info = next((c for c in self.columns if c["name"] == col_name), None)
+                 if column_info and column_info.get("filterable") and column_info.get("db_field"):
+                     db_field_name = column_info["db_field"]; model_attr = getattr(Engineer, db_field_name, None)
+                     if model_attr:
+                         try:
+                             if db_field_name == 'id': filter_clauses.append(model_attr == int(filter_value)) if filter_value.isdigit() else filter_clauses.append(sqlalchemy.sql.false())
+                             elif isinstance(getattr(Engineer, db_field_name).type, sqlalchemy.types.String): filter_clauses.append(model_attr.ilike(f"%{filter_value}%"))
+                             elif isinstance(getattr(Engineer, db_field_name).type, sqlalchemy.types.Boolean) and filter_value.lower() in ['true', 'false', 'yes', 'no', '1', '0']: filter_clauses.append(model_attr == (filter_value.lower() in ['true', 'yes', '1']))
+                         except Exception as filter_err: print(f"Filter Error: {filter_err}"); traceback.print_exc()
+            if filter_clauses: query = query.filter(sqlalchemy.and_(*filter_clauses))
+            # Apply Sorting
+            if self.sort_column:
                 col_info = next((c for c in self.columns if c['name'] == self.sort_column), None)
-                if col_info and 'db_field' in col_info:
-                    db_field = col_info['db_field']
-                    sort_func = asc if self.sort_direction == 'asc' else desc
-                    query = query.order_by(sort_func(getattr(Engineer, db_field)))
-            
-            # Calculate pagination
-            total_records = query.count()
-            self.total_pages = max(1, math.ceil(total_records / self.rows_per_page))
-            self.current_page = min(self.current_page, self.total_pages)
-            
-            # Get paginated results
+                if col_info and col_info.get('sortable') and col_info.get('db_field'):
+                    db_field = col_info['db_field']; model_attr = getattr(Engineer, db_field, None)
+                    if model_attr:
+                         try: sort_func = asc if self.sort_direction == 'asc' else desc; query = query.order_by(sort_func(model_attr))
+                         except Exception as sort_err: print(f"Sort Error: {sort_err}"); traceback.print_exc()
+            # Count and Paginate
+            try: total_count = query.count()
+            except Exception as count_e: print(f"Count Error: {count_e}"); total_count = 0
+            self.total_pages = max(1, math.ceil(total_count / self.rows_per_page) if self.rows_per_page > 0 else 1)
+            if self.current_page > self.total_pages: self.current_page = self.total_pages
             offset = (self.current_page - 1) * self.rows_per_page
             engineers = query.offset(offset).limit(self.rows_per_page).all()
-            
-            # Store all IDs on current page for select all functionality
-            self.all_engineer_ids_on_current_page = [e.id for e in engineers]
-            
-            # --- Create a grid layout for the content ---
-            # First, create a row for column headers
-            current_grid_col = 0
-            
-            # Create rows for each engineer
-            for row_idx, engineer in enumerate(engineers):
-                # Determine row color based on alternating pattern
-                row_color = "#2A2A2A" if row_idx % 2 == 0 else "#333333"
-                
-                # Create a row container
-                row_frame = ctk.CTkFrame(self.content_frame, fg_color=row_color, corner_radius=0)
-                row_frame.grid(row=row_idx, column=0, sticky="ew", pady=(0, 1))
-                
-                # Add cells for each visible column
-                current_grid_col = 0
-                for col_idx, col_def in enumerate(self.columns):
-                    if not self.column_visibility[col_def['name']]:
-                        continue
-                    
-                    # Calculate exact width for the column
-                    col_width = max(col_def.get('min_width', 50), col_def['width'])
-                    
-                    # Create a fixed-width frame for this cell
-                    cell_frame = ctk.CTkFrame(row_frame, fg_color="transparent", width=col_width, height=40)
-                    cell_frame.grid(row=0, column=current_grid_col, sticky="nsew", padx=0, pady=0)
-                    cell_frame.grid_propagate(False)  # Force the frame to maintain its size
-                    
-                    # Add content based on column type
-                    if col_def['name'] == "Select":
-                        # Create checkbox for row selection
-                        var = tk.BooleanVar(value=engineer.id in self.selected_rows)
-                        checkbox = ctk.CTkCheckBox(
-                            cell_frame, text="", variable=var, 
-                            width=20, height=20, corner_radius=3,
-                            fg_color="#1f538d", hover_color="#2e6fbd",
-                            border_color="#666666", border_width=1,
-                            command=lambda e_id=engineer.id, v=var: self.toggle_row_selection(e_id, v.get())
-                        )
-                        checkbox.place(relx=0.5, rely=0.5, anchor="center")
-                    
-                    elif col_def['name'] == "Actions":
-                        # Create action buttons container
-                        actions_frame = ctk.CTkFrame(cell_frame, fg_color="transparent")
-                        actions_frame.place(relx=0.5, rely=0.5, anchor="center")
-                        
-                        # View/Edit button
-                        view_btn = ctk.CTkButton(
-                            actions_frame, text="View/Edit",
-                            fg_color="#1f538d", hover_color="#2e6fbd",
-                            height=24, width=80, corner_radius=4,
-                            command=lambda e=engineer: self.edit_engineer(e)
-                        )
-                        view_btn.grid(row=0, column=0, padx=(0, 5))
-                        
-                        # Delete button
-                        delete_btn = ctk.CTkButton(
-                            actions_frame, text="Delete",
-                            fg_color="#8B0000", hover_color="#A52A2A",
-                            height=24, width=80, corner_radius=4,
-                            command=lambda e_id=engineer.id: self._confirm_delete(e_id)
-                        )
-                        delete_btn.grid(row=0, column=1)
-                    
-                    else:
-                        # Get field value based on db_field mapping
-                        if 'db_field' in col_def:
-                            # Handle special formatting for specific fields
-                            if col_def['db_field'] == 'date_of_birth' and getattr(engineer, col_def['db_field']):
-                                value = getattr(engineer, col_def['db_field']).strftime('%Y-%m-%d')
-                            elif col_def['db_field'] == 'is_project_manager':
-                                value = "Yes" if getattr(engineer, col_def['db_field']) else "No"
-                            else:
-                                value = getattr(engineer, col_def['db_field'], "-")
-                                if value is None: value = "-"
-                        else:
-                            value = "-"
-                        
-                        # Create label for regular cell
-                        label = ctk.CTkLabel(
-                            cell_frame,
-                            text=str(value),
-                            fg_color="transparent",
-                            text_color="white",
-                            anchor="w",
-                            font=("Arial", 12),
-                            width=col_width-20,
-                            height=28
-                        )
-                        label.place(relx=0.5, rely=0.5, anchor="center")
-                    
-                    current_grid_col += 1
-            
-            # --- Force scrollable frame update AFTER rows are added ---
-            self.data_canvas.update_idletasks()
-            self._update_scrollable_width()
+            self.all_engineer_ids_on_current_page = [eng.id for eng in engineers if eng.id is not None]
+
+            # --- Insert Data Rows (Into content_frame) ---
+            current_grid_col_map = {name: i for i, name in enumerate(col['name'] for col in self.columns if self.column_visibility[col['name']])}
+            if not engineers:
+                placeholder_label = ctk.CTkLabel(self.content_frame, text="No engineers found.", text_color="gray50", padx=20, pady=20)
+                placeholder_label.grid(row=0, column=0, columnspan=len(current_grid_col_map) or 1)
+            else:
+                for row_idx, engineer in enumerate(engineers):
+                    row_color = "#282828" if row_idx % 2 == 0 else "#242424"
+                    # Create row_frame inside the content_frame now
+                    row_frame = ctk.CTkFrame(self.content_frame, fg_color=row_color, corner_radius=0)
+                    # Configure columns within the row_frame
+                    for grid_col_idx, col_name in enumerate(current_grid_col_map.keys()):
+                         col_info = next(c for c in self.columns if c['name'] == col_name)
+                         row_frame.grid_columnconfigure(grid_col_idx, weight=col_info['weight'], minsize=col_info['min_width'])
+                    row_frame.grid(row=row_idx, column=0, columnspan=len(current_grid_col_map), sticky="ew", pady=(0, 1))
+
+                    # --- Place content widgets directly into row_frame ---
+                    for col_info in self.columns:
+                         col_name = col_info['name']
+                         if not self.column_visibility[col_name]: continue
+                         grid_col = current_grid_col_map[col_name]
+
+                         if col_name == "Select":
+                             checkbox_var = tk.BooleanVar(value=(engineer.id in self.selected_rows))
+                             checkbox = ctk.CTkCheckBox(row_frame, text="", variable=checkbox_var,
+                                                        command=lambda id=engineer.id, var=checkbox_var: self.toggle_row_selection(id, var),
+                                                        width=20, height=20, fg_color="#1f538d", hover_color="#3b8ed0",
+                                                        border_color="#4F4F4F", corner_radius=3)
+                             checkbox.grid(row=0, column=grid_col, sticky="w", padx=(self.base_left_padding, 0), pady=self.vertical_padding)
+
+                         elif col_name == "Actions":
+                             actions_frame = self._create_actions_frame(row_frame, engineer)
+                             actions_frame.grid(row=0, column=grid_col, sticky="nsew", padx=0, pady=0)
+
+                         elif col_info.get("db_field"):
+                             attr_val = getattr(engineer, col_info["db_field"], "-")
+                             # Formatting
+                             if isinstance(attr_val, bool): text = "Yes" if attr_val else "No"
+                             elif isinstance(attr_val, (int, float)): text = str(attr_val)
+                             elif hasattr(attr_val, 'strftime'): text = attr_val.strftime('%Y-%m-%d')
+                             else: text = str(attr_val) if attr_val is not None else "-"
+                             # Label
+                             label = ctk.CTkLabel(row_frame, text=text, anchor="w", justify="left",
+                                                  font=data_font, text_color="#D0D0D0")
+                             label.grid(row=0, column=grid_col, sticky="w", padx=(self.base_left_padding, 5), pady=self.vertical_padding)
+
+            # --- Final UI Updates ---
+            if self.on_page_change: self.on_page_change(self.current_page, self.total_pages)
+            self._update_header_indicators(); self._update_select_all_checkbox_state()
+
+            # --- Force Scrollregion Update AFTER rows are added ---
+            self.content_frame.update_idletasks() # Update the content frame FIRST
+            self.canvas.configure(scrollregion=self.canvas.bbox("all")) # Update canvas scroll region
+            # print(f"Scrollregion updated after load: {self.canvas.bbox('all')}") # Debug print
+
 
         # --- Exception Handling ---
         except Exception as e:
-            print(f"Error loading data: {e}")
-            traceback.print_exc()
+            print(f"Error loading table data: {str(e)}")
+            print(traceback.format_exc())
             try: show_notification(self, f"{str(e)}", "Error Loading Data", "error")
             except Exception as ne: print(f"--- ERROR IN NOTIFICATION SERVICE ---"); print(f"Original error: {e}"); print(f"Notification error: {ne}"); traceback.print_exc(); messagebox.showerror("Error Loading Data", f"{str(e)}\n\n(Notification service also failed)")
 
@@ -428,54 +454,27 @@ class EngineerTable(ctk.CTkFrame):
             if removed_count > 0: self.selected_rows.difference_update(ids_on_page); changed = True
         if changed: self.load_data() # Reload to update checkboxes
     def _update_select_all_checkbox_state(self):
-        """Update the state of the select all checkbox based on current selections."""
         select_all_widget_data = self.header_widgets.get("Select")
         if select_all_widget_data:
             select_all_var = select_all_widget_data.get("var")
             if select_all_var:
                 ids_on_page = set(self.all_engineer_ids_on_current_page)
-                if not ids_on_page: 
-                    select_all_var.set(False)
-                elif all(id in self.selected_rows for id in ids_on_page): 
-                    select_all_var.set(True)
-                else: 
-                    select_all_var.set(False)
-    def toggle_row_selection(self, engineer_id, is_selected):
-        """Toggle selection of a row and update the selected rows list."""
-        if is_selected:
-            if engineer_id not in self.selected_rows:
-                self.selected_rows.add(engineer_id)
-        else:
-            if engineer_id in self.selected_rows:
-                self.selected_rows.remove(engineer_id)
-                
-        # Update select all checkbox state
-        self._update_select_all_checkbox_state()
-        
-    def _on_select_all_clicked(self):
-        """Handle click on the select all checkbox."""
-        select_all_widget_data = self.header_widgets.get("Select")
-        if select_all_widget_data:
-            select_all_var = select_all_widget_data.get("var")
-            if select_all_var:
-                is_selected = select_all_var.get()
-                if is_selected:
-                    # Select all rows on current page
-                    for engineer_id in self.all_engineer_ids_on_current_page:
-                        if engineer_id not in self.selected_rows:
-                            self.selected_rows.add(engineer_id)
-                else:
-                    # Deselect all rows on current page
-                    for engineer_id in self.all_engineer_ids_on_current_page:
-                        if engineer_id in self.selected_rows:
-                            self.selected_rows.remove(engineer_id)
-                # Refresh the table to update checkboxes
-                self.load_data()
-                
+                if not ids_on_page: select_all_var.set(False)
+                elif ids_on_page.issubset(self.selected_rows): select_all_var.set(True)
+                else: select_all_var.set(False)
+    def toggle_row_selection(self, engineer_id, checkbox_var=None):
+        if engineer_id in self.selected_rows: self.selected_rows.remove(engineer_id)
+        else: self.selected_rows.add(engineer_id)
+        self._update_select_all_checkbox_state() # Update header checkbox state
+
+    # --- Dialogs and Data Actions ---
+    def show_details_or_edit(self, engineer):
+        dialog = EngineerDialog(self, self.session, engineer=engineer, on_save=self.load_data)
+
     # --- Methods for External Buttons ---
     def select_all_on_page(self):
         ids_on_page = self.all_engineer_ids_on_current_page
-        newly_selected = [id for id in ids_on_page if id not in self.selected_rows]
+        newly_selected = set(ids_on_page) - self.selected_rows
         self.selected_rows.update(ids_on_page)
         if newly_selected: self.load_data(); show_notification(self, f"Selected {len(ids_on_page)} on page.", "Selection", "info")
         else: show_notification(self, "All on page already selected.", "Selection", "warning")
@@ -539,68 +538,4 @@ class EngineerTable(ctk.CTkFrame):
     def edit_engineer(self, engineer):
          """Opens the dialog to edit an existing engineer."""
          dialog = EngineerDialog(self, self.session, engineer=engineer, on_save=self.load_data)
-
-    # This method is no longer needed with the simplified approach
-
-    def _update_scrollable_width(self, event=None):
-        """Update the content width to ensure horizontal scrolling works"""
-        # Calculate total width of visible columns
-        total_width = sum(col['width'] for col in self.columns if self.column_visibility[col['name']])
-        # Ensure minimum width to force scrolling
-        total_width = max(total_width, self.min_total_width)
-        
-        # Set both header and content frames to the same width
-        self.header_frame.configure(width=total_width)
-        self.content_frame.configure(width=total_width)
-        
-        # Update the canvas scroll regions
-        self._update_scroll_region(self.header_canvas)
-        self._update_scroll_region(self.data_canvas)
-        
-        # Ensure the canvas widths match the container width
-        container_width = self.winfo_width() - 20  # Account for padding
-        if container_width > 0:
-            self.header_canvas.configure(width=container_width)
-            self.data_canvas.configure(width=container_width)
-    
-    def _update_scroll_region(self, canvas):
-        """Update the scroll region for a canvas"""
-        canvas.configure(scrollregion=canvas.bbox("all"))
-    
-    def _on_header_scroll(self, *args):
-        """Synchronize header scrolling with data canvas"""
-        self.data_canvas.xview(*args)
-        # Update the horizontal scrollbar position
-        self.h_scrollbar.set(*self.data_canvas.xview())
-    
-    def _on_data_scroll(self, *args):
-        """Synchronize data scrolling with header canvas"""
-        self.header_canvas.xview(*args)
-        # Update the horizontal scrollbar position
-        self.h_scrollbar.set(*self.header_canvas.xview())
-    
-    def _on_h_scroll(self, *args):
-        """Synchronize horizontal scrolling between header and data canvases"""
-        # Scroll both canvases together
-        self.header_canvas.xview(*args)
-        self.data_canvas.xview(*args)
-    
-    def _on_window_resize(self, event):
-        """Handle window resize events"""
-        # Only process events from the main window
-        if event.widget == self:
-            # Update canvas widths to match the window
-            width = max(self.winfo_width() - 20, 100)  # Account for padding
-            self.header_canvas.configure(width=width)
-            self.data_canvas.configure(width=width)
-            
-            # Ensure scroll regions are updated
-            self._update_scroll_region(self.header_canvas)
-            self._update_scroll_region(self.data_canvas)
-            
-            # Make sure the header and content frames have the same width
-            total_width = sum(col['width'] for col in self.columns if self.column_visibility[col['name']])
-            total_width = max(total_width, self.min_total_width)
-            self.header_frame.configure(width=total_width)
-            self.content_frame.configure(width=total_width)
 
